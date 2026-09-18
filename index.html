@@ -3,100 +3,116 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KAIRO PRONO — Prédictions Football</title>
+<meta name="description" content="KAIRO PRONO : analyse statistique et estimation probabiliste des scores de matchs de football.">
+<title>KAIRO PRONO | Football Analytics</title>
 <style>
-*{box-sizing:border-box}
-body{margin:0;font-family:Arial,sans-serif;background:#f3f5f8;color:#17202a}
-header{background:#111827;color:#fff;text-align:center;padding:28px 18px}
-header h1{margin:0;font-size:32px} header p{color:#d1d5db;margin:8px 0 0}
-.container{max-width:900px;margin:auto;padding:18px}
-.card{background:#fff;border-radius:16px;padding:22px;margin:18px 0;box-shadow:0 4px 16px rgba(0,0,0,.08)}
-h2{margin-top:0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-label{font-weight:bold;font-size:14px;display:block;margin-bottom:6px}
-input{width:100%;padding:13px;border:1px solid #d1d5db;border-radius:10px;font-size:16px}
-button{width:100%;border:0;border-radius:11px;padding:15px;background:#111827;color:#fff;font-size:17px;font-weight:bold;margin-top:16px}
-button:active{transform:scale(.99)}
-.team-title{font-size:20px;font-weight:bold;margin:8px 0 14px}
-.result{display:none}
-.main-score{text-align:center;background:#eef2ff;border-radius:14px;padding:20px;margin:15px 0}
-.main-score small{display:block;color:#6b7280;margin-bottom:7px}.score{font-size:38px;font-weight:bold}
-.stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
-.stat{background:#f8fafc;border-radius:12px;padding:13px;text-align:center}.stat b{display:block;font-size:20px}
-table{width:100%;border-collapse:collapse;margin-top:12px}th,td{padding:10px;border-bottom:1px solid #e5e7eb;text-align:center}th{background:#f8fafc}
-.note{font-size:13px;color:#6b7280;line-height:1.5}
-footer{text-align:center;color:#6b7280;padding:28px 15px}
-@media(max-width:650px){.grid,.stats{grid-template-columns:1fr}}
+:root{--navy:#0b1220;--navy2:#111b2e;--gold:#f4b942;--bg:#f4f7fb;--card:#fff;--text:#172033;--muted:#667085;--line:#e5eaf1;--soft:#f7f9fc}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,Arial,sans-serif}
+header{background:linear-gradient(135deg,var(--navy),var(--navy2));color:#fff;padding:34px 18px 42px;text-align:center}
+.brand{font-size:34px;font-weight:900;letter-spacing:-1px}.brand span{color:var(--gold)}
+header p{margin:9px auto 0;max-width:620px;color:#cbd5e1;font-size:15px}
+.wrap{max-width:960px;margin:-18px auto 0;padding:0 16px 30px;position:relative}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:22px;margin:16px 0;box-shadow:0 8px 28px rgba(15,23,42,.06)}
+.section-head{display:flex;align-items:center;gap:12px;margin-bottom:18px}.icon{width:42px;height:42px;border-radius:12px;background:#eef2ff;display:grid;place-items:center;font-size:22px}.section-head h2{margin:0;font-size:21px}.sub{color:var(--muted);font-size:13px;margin:4px 0 0}
+.match-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.team{border:1px solid var(--line);border-radius:16px;padding:17px;background:var(--soft)}.team.home{border-top:4px solid var(--gold)}.team.away{border-top:4px solid #64748b}
+.team-title{font-weight:800;font-size:17px;margin-bottom:14px}label{display:block;font-size:12px;font-weight:700;color:#475467;margin:12px 0 6px}
+input{width:100%;border:1px solid #d5dbe5;border-radius:10px;padding:12px;font-size:15px;background:#fff;outline:none}input:focus{border-color:#64748b;box-shadow:0 0 0 3px rgba(100,116,139,.12)}
+.hint{font-size:11px;color:var(--muted);margin-top:5px}.advanced{margin-top:16px;border-top:1px solid var(--line);padding-top:16px}
+.adv-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+button{width:100%;border:0;border-radius:12px;padding:15px;background:var(--navy);color:#fff;font-size:16px;font-weight:800;cursor:pointer;margin-top:18px}button:hover{background:#16233a}
+.result{display:none}.badge{display:inline-block;background:#eef2ff;color:#3446a5;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:800}
+.scorebox{text-align:center;background:linear-gradient(135deg,#eef2ff,#f8faff);border:1px solid #dfe5ff;border-radius:18px;padding:24px;margin:15px 0}.scorebox .label{font-size:12px;color:var(--muted);font-weight:700}.score{font-size:34px;font-weight:900;margin-top:7px;line-height:1.25}
+.outcomes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.outcome{background:var(--soft);border:1px solid var(--line);border-radius:14px;padding:14px;text-align:center}.outcome strong{display:block;font-size:20px;margin-bottom:3px}.outcome span{font-size:12px;color:var(--muted)}
+h3{font-size:17px;margin:24px 0 10px}table{width:100%;border-collapse:collapse}th,td{padding:12px 8px;border-bottom:1px solid var(--line);text-align:left}th:last-child,td:last-child{text-align:right}th{font-size:12px;color:var(--muted);text-transform:uppercase}td{font-size:14px}.prob{font-weight:800}
+.disclaimer{font-size:12px;line-height:1.6;color:var(--muted);background:#fafafa;border-radius:12px;padding:13px;margin-top:18px}
+footer{text-align:center;color:var(--muted);font-size:12px;padding:8px 15px 28px}
+@media(max-width:700px){.match-grid,.adv-grid{grid-template-columns:1fr}.brand{font-size:30px}.card{padding:18px}.score{font-size:28px}.outcomes strong{font-size:18px}}
 </style>
 </head>
 <body>
 <header>
-<h1>⚽ KAIRO PRONO</h1>
-<p>Analyse statistique et estimation des scores exacts</p>
+<div class="brand">⚽ KAIRO <span>PRONO</span></div>
+<p>Football Analytics • Modèle probabiliste • Estimation des scores exacts</p>
 </header>
 
-<div class="container">
+<main class="wrap">
 <section class="card">
-<h2>🔮 Nouvelle prédiction</h2>
-<p>Entre les statistiques récentes des deux équipes. Le calcul utilise un modèle probabiliste de buts.</p>
+<div class="section-head"><div class="icon">🔮</div><div><h2>Analyse d’un match</h2><div class="sub">Renseigne les données disponibles pour obtenir une estimation transparente.</div></div></div>
 
-<div class="grid">
-<div>
-<div class="team-title">🏠 Équipe à domicile</div>
-<label>Nom</label><input id="home" value="Équipe A">
+<div class="match-grid">
+<div class="team home">
+<div class="team-title">🏠 Domicile</div>
+<label>Nom de l’équipe</label><input id="home" value="Équipe A">
 <label>Buts marqués / match</label><input id="hgf" type="number" step="0.1" min="0" value="1.8">
 <label>Buts encaissés / match</label><input id="hga" type="number" step="0.1" min="0" value="1.0">
 </div>
-<div>
-<div class="team-title">✈️ Équipe à l'extérieur</div>
-<label>Nom</label><input id="away" value="Équipe B">
+<div class="team away">
+<div class="team-title">✈️ Extérieur</div>
+<label>Nom de l’équipe</label><input id="away" value="Équipe B">
 <label>Buts marqués / match</label><input id="agf" type="number" step="0.1" min="0" value="1.2">
 <label>Buts encaissés / match</label><input id="aga" type="number" step="0.1" min="0" value="1.5">
 </div>
 </div>
-<button onclick="predict()">🔮 CALCULER LA PRÉDICTION</button>
+
+<div class="advanced">
+<div class="section-head" style="margin-bottom:8px"><div class="icon">📈</div><div><h2>Données complémentaires</h2><div class="sub">Optionnelles — elles affinent le modèle.</div></div></div>
+<div class="adv-grid">
+<div><label>Forme domicile (0–5)</label><input id="hf" type="number" min="0" max="5" step="1" value="3"><div class="hint">Victoires / nuls sur les 5 derniers matchs</div></div>
+<div><label>Forme extérieur (0–5)</label><input id="af" type="number" min="0" max="5" step="1" value="2"><div class="hint">Victoires / nuls sur les 5 derniers matchs</div></div>
+<div><label>Face-à-face récents (0–5)</label><input id="h2h" type="number" min="0" max="5" step="1" value="2"><div class="hint">Matchs où le domicile a gagné</div></div>
+</div>
+</div>
+
+<button onclick="predict()">⚡ LANCER L’ANALYSE</button>
 </section>
 
 <section class="card result" id="result">
-<h2>📊 Résultat de l'analyse</h2>
-<div class="main-score"><small>Score exact le plus probable</small><div class="score" id="best">-</div></div>
-<div class="stats">
-<div class="stat"><b id="pHome">-</b>Domicile</div>
-<div class="stat"><b id="pDraw">-</b>Nul</div>
-<div class="stat"><b id="pAway">-</b>Extérieur</div>
-</div>
-<h3>🎯 Scores exacts les plus probables</h3>
-<table><thead><tr><th>Score</th><th>Probabilité</th></tr></thead><tbody id="scores"></tbody></table>
-<p class="note">⚠️ Estimation statistique : elle ne garantit pas le résultat réel. La qualité dépend notamment de la qualité et de la période des statistiques saisies.</p>
-</section>
+<div class="section-head"><div class="icon">📊</div><div><h2>Rapport KAIRO PRONO</h2><div class="sub" id="matchLabel"></div></div></div>
+<div class="scorebox"><div class="label">SCORE EXACT LE PLUS PROBABLE</div><div class="score" id="best">—</div><div class="badge" id="model">Modèle probabiliste</div></div>
+
+<div class="outcomes">
+<div class="outcome"><strong id="pHome">—</strong><span>Victoire domicile</span></div>
+<div class="outcome"><strong id="pDraw">—</strong><span>Match nul</span></div>
+<div class="outcome"><strong id="pAway">—</strong><span>Victoire extérieur</span></div>
 </div>
 
-<footer>© 2026 KAIRO PRONO — Football Predictions</footer>
+<h3>🎯 Distribution des scores</h3>
+<table><thead><tr><th>Score exact</th><th>Probabilité</th></tr></thead><tbody id="scores"></tbody></table>
+
+<div class="disclaimer">ℹ️ <b>À propos du calcul :</b> estimation basée sur une distribution de Poisson des buts, les moyennes offensives/défensives saisies, un ajustement domicile/extérieur et les données complémentaires. Ce résultat est probabiliste et ne garantit pas le score réel.</div>
+</section>
+</main>
+<footer>© 2026 KAIRO PRONO — Football Analytics</footer>
 
 <script>
 function fact(n){let r=1;for(let i=2;i<=n;i++)r*=i;return r}
-function pois(k,l){return Math.exp(-l)*Math.pow(l,k)/fact(k)}
+function poisson(k,l){return Math.exp(-l)*Math.pow(l,k)/fact(k)}
 function pct(x){return (x*100).toFixed(1)+"%"}
+function num(id){return Number(document.getElementById(id).value)}
 function predict(){
  const home=document.getElementById("home").value.trim()||"Domicile";
  const away=document.getElementById("away").value.trim()||"Extérieur";
- const hgf=+document.getElementById("hgf").value, hga=+document.getElementById("hga").value;
- const agf=+document.getElementById("agf").value, aga=+document.getElementById("aga").value;
- if([hgf,hga,agf,aga].some(v=>!Number.isFinite(v)||v<0)){alert("Vérifie les statistiques saisies.");return}
- const lh=Math.max(.05,(hgf+aga)/2*1.08), la=Math.max(.05,(agf+hga)/2*.92);
- let rows=[], ph=0,pd=0,pa=0;
- for(let h=0;h<=7;h++) for(let a=0;a<=7;a++){
-   const p=pois(h,lh)*pois(a,la); rows.push({h,a,p});
-   if(h>a)ph+=p; else if(h===a)pd+=p; else pa+=p;
- }
+ const hgf=num("hgf"),hga=num("hga"),agf=num("agf"),aga=num("aga"),hf=num("hf"),af=num("af"),h2h=num("h2h");
+ if([hgf,hga,agf,aga,hf,af,h2h].some(v=>!Number.isFinite(v)||v<0)||hf>5||af>5||h2h>5){alert("Vérifie les valeurs saisies.");return}
+ let lh=(hgf+aga)/2, la=(agf+hga)/2;
+ lh*=1.08; la*=0.92;
+ lh*=1+(hf-2.5)*0.025; la*=1+(af-2.5)*0.025;
+ lh*=1+(h2h-2.5)*0.012;
+ lh=Math.max(.05,Math.min(5,lh));la=Math.max(.05,Math.min(5,la));
+ let rows=[],total=0,ph=0,pd=0,pa=0;
+ for(let h=0;h<=10;h++)for(let a=0;a<=10;a++){let p=poisson(h,lh)*poisson(a,la);rows.push({h,a,p});total+=p}
+ rows.forEach(x=>{x.p/=total;if(x.h>x.a)ph+=x.p;else if(x.h===x.a)pd+=x.p;else pa+=x.p});
  rows.sort((x,y)=>y.p-x.p);
- document.getElementById("best").textContent=home+" "+rows[0].h+" - "+rows[0].a+" "+away;
+ document.getElementById("matchLabel").textContent=home+" vs "+away;
+ document.getElementById("best").textContent=xScore(rows[0],home,away);
  document.getElementById("pHome").textContent=pct(ph);
  document.getElementById("pDraw").textContent=pct(pd);
  document.getElementById("pAway").textContent=pct(pa);
- document.getElementById("scores").innerHTML=rows.slice(0,6).map(x=>"<tr><td><b>"+x.h+" - "+x.a+"</b></td><td>"+pct(x.p)+"</td></tr>").join("");
+ document.getElementById("scores").innerHTML=rows.slice(0,8).map(x=>"<tr><td><b>"+x.h+" - "+x.a+"</b></td><td class='prob'>"+pct(x.p)+"</td></tr>").join("");
  document.getElementById("result").style.display="block";
- document.getElementById("result").scrollIntoView({behavior:"smooth"});
+ document.getElementById("result").scrollIntoView({behavior:"smooth",block:"start"});
 }
+function xScore(x,home,away){return home+" "+x.h+" – "+x.a+" "+away}
 </script>
 </body>
 </html>
