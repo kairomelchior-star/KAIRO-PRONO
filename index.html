@@ -28,7 +28,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px 8px;border-bottom:1
 </style>
 </head>
 <body>
-<header><div class="brand">⚽ KAIRO <span>PRONO</span></div><p>Football Analytics • Données clubs • Forme • Probabilités • Scores exacts</p></header>
+<header><div class="brand">⚽ KAIRO <span>PRONO</span></div><p>Football Analytics • Buts marqués • Buts encaissés • Forme • Probabilités • Scores exacts</p></header>
 <main class="wrap">
 <section class="card">
 <div class="section-head"><div class="icon">🔎</div><div><h2>Sélection automatique des clubs</h2><div class="sub">Entre le nom du club : KAIRO PRONO récupère son identité, son logo et les données disponibles.</div></div></div>
@@ -74,7 +74,10 @@ async function predict(){
  if(!teams.home||!teams.away){setStatus('Charge les deux clubs avant de lancer l’analyse.','err');return;}const btn=document.getElementById('analyseBtn');btn.disabled=true;btn.textContent='⏳ ANALYSE EN COURS…';setStatus('Récupération des résultats disponibles…');
  try{const[he,ae]=await Promise.all([lastMatches(teams.home),lastMatches(teams.away)]),hs=statsFromEvents(teams.home,he),as=statsFromEvents(teams.away,ae);if(!hs.n&&!as.n)throw new Error('NO_STATS');
  const hGF=hs.n?hs.gf/hs.n:1.5,hGA=hs.n?hs.ga/hs.n:1.2,aGF=as.n?as.gf/as.n:1.3,aGA=as.n?as.ga/as.n:1.4,hForm=hs.n?((hs.w*3+hs.d)/Math.max(1,hs.n))/3:.5,aForm=as.n?((as.w*3+as.d)/Math.max(1,as.n))/3:.5;
- let lh=((hGF+aGA)/2)*1.08,la=((aGF+hGA)/2)*.92;lh*=1+(hForm-.5)*.08;la*=1+(aForm-.5)*.08;lh=Math.max(.05,Math.min(5,lh));la=Math.max(.05,Math.min(5,la));
+ // Le moteur utilise explicitement les buts marqués ET encaissés des deux équipes. L'attaque d'une équipe est croisée avec la défense adverse.
+ let lh=(hGF*0.55+aGA*0.45)*1.08,la=(aGF*0.55+hGA*0.45)*0.92;
+ // La forme récente n'efface jamais les statistiques de buts : elle n'est qu'un petit ajustement complémentaire.
+ lh*=1+(hForm-.5)*.08;la*=1+(aForm-.5)*.08;lh=Math.max(.05,Math.min(5,lh));la=Math.max(.05,Math.min(5,la));
  let rows=[],total=0,ph=0,pd=0,pa=0,btts=0;for(let h=0;h<=10;h++)for(let a=0;a<=10;a++){const p=poisson(h,lh)*poisson(a,la);rows.push({h,a,p});total+=p}rows.forEach(x=>{x.p/=total;if(x.h>x.a)ph+=x.p;else if(x.h===x.a)pd+=x.p;else pa+=x.p;if(x.h>0&&x.a>0)btts+=x.p});rows.sort((x,y)=>y.p-x.p);
  document.getElementById('homeName').textContent=teams.home.strTeam;document.getElementById('awayName').textContent=teams.away.strTeam;document.getElementById('rhClub').textContent=teams.home.strTeam;document.getElementById('raClub').textContent=teams.away.strTeam;document.getElementById('rhLogo').src=teams.home.strBadge||teams.home.strLogo||'';document.getElementById('raLogo').src=teams.away.strBadge||teams.away.strLogo||'';
  document.getElementById('rhInfo').textContent=(teams.home.strLeague||'—')+' • '+(teams.home.strCountry||'—')+' • '+(teams.home.strStadium||'—');document.getElementById('raInfo').textContent=(teams.away.strLeague||'—')+' • '+(teams.away.strCountry||'—')+' • '+(teams.away.strStadium||'—');
