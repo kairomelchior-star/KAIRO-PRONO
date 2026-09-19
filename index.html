@@ -101,7 +101,7 @@ async function fetchSeason(t,season,leagueId){
 // =========================
 // SofaScore : recherche du club puis historique paginé.
 // Cette source couvre les compétitions présentes dans le calendrier du club.
-const SOFA='https://www.sofascore.com/api/v1';
+const SOFA='https://api.sofascore.com/api/v1';
 const sofaCache=new Map();
 
 function normName(s){
