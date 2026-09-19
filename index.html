@@ -280,6 +280,8 @@ async function lastMatches(t){
  return clean(all).slice(0,3);
 }
 function statsFromEvents(t,events){let gf=0,ga=0,w=0,d=0,l=0,n=0;const rows=[];for(const e of events){const hs=parseInt(e.intHomeScore),as=parseInt(e.intAwayScore);if(!Number.isFinite(hs)||!Number.isFinite(as))continue;const home=e.idHomeTeam===t.idTeam||e.strHomeTeam===t.strTeam,scored=home?hs:as,conceded=home?as:hs;gf+=scored;ga+=conceded;n++;if(scored>conceded)w++;else if(scored===conceded)d++;else l++;rows.push({date:e.dateEvent||'',opp:home?e.strAwayTeam:e.strHomeTeam,score:scored+' - '+conceded,result:scored>conceded?'W':scored===conceded?'D':'L'});}return{gf,ga,w,d,l,n,rows};}
+function pct(x){return (Number(x)*100).toFixed(1)+'%';}
+function poisson(k,lambda){const l=Math.max(0.0001,Number(lambda));let p=Math.exp(-l);for(let i=1;i<=k;i++)p*=l/i;return p;}
 async function predict(){
  if(!teams.home||!teams.away){setStatus('Charge les deux clubs avant de lancer l’analyse.','err');return;}const btn=document.getElementById('analyseBtn');btn.disabled=true;btn.textContent='⏳ ANALYSE EN COURS…';setStatus('Recherche automatique des 3 derniers résultats, toutes compétitions…');
  try{setStatus('Recherche des 3 derniers résultats de chaque équipe, toutes compétitions confondues, …');const[he,ae]=await Promise.all([lastMatches(teams.home),lastMatches(teams.away)]),hs=statsFromEvents(teams.home,he),as=statsFromEvents(teams.away,ae);if(hs.n<3||as.n<3)throw new Error('MIN3');
