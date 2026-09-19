@@ -57,7 +57,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px 8px;border-bottom:1
 <h3>🧮 Indicateurs du modèle</h3><div class="metrics"><div class="metric"><b id="xgH">—</b><span>Buts attendus domicile</span></div><div class="metric"><b id="xgA">—</b><span>Buts attendus extérieur</span></div><div class="metric"><b id="totalG">—</b><span>Total attendu</span></div><div class="metric"><b id="btts">—</b><span>Deux équipes marquent</span></div></div>
 <h3>🎯 Top 3 des scores exacts</h3><table><thead><tr><th>Score</th><th>Probabilité</th></tr></thead><tbody id="scores"></tbody></table>
 <h3>🗓️ Derniers matchs disponibles</h3><table><thead><tr><th>Club</th><th>Adversaire</th><th>Score</th></tr></thead><tbody id="recent"></tbody></table>
-<div class="disclaimer">ℹ️ <b>Source automatique :</b> les informations de club et logos sont récupérés via TheSportsDB. Pour les 5 derniers résultats, KAIRO PRONO croise automatiquement TheSportsDB, puis FotMob et ESPN en secours afin de couvrir les compétitions manquantes. Si aucune donnée exploitable n'est trouvée, le système bloque l'analyse au lieu d'inventer une statistique. Le score exact reste une estimation probabiliste, jamais une certitude.</div>
+<div class="disclaimer">ℹ️ <b>Source automatique :</b> les informations de club et logos sont récupérés via TheSportsDB. Pour les 5 derniers résultats, KAIRO PRONO croise automatiquement TheSportsDB, puis FotMob et ESPN en secours afin de couvrir les compétitions manquantes. Si aucune donnée exploitable n'est trouvée dans les sources disponibles, le système bloque l'analyse au lieu d'inventer une statistique. Le score exact reste une estimation probabiliste, jamais une certitude.</div>
 </section></main><footer>© 2026 KAIRO PRONO — Football Analytics • Données : TheSportsDB</footer>
 <script>
 const API='https://www.thesportsdb.com/api/v1/json/123/';const teams={home:null,away:null};
@@ -97,7 +97,7 @@ async function fetchSeason(t,season,leagueId){
 }
 async function fetchEspnTeams(){
  try{
-  const r=await fetch('https://site.web.api.espn.com/apis/site/v2/sports/soccer/all/teams?limit=1000');
+  const r=await fetch('https://site.api.espn.com/apis/site/v2/sports/soccer/all/teams?limit=1000');
   if(!r.ok)return[];
   const d=await r.json(),out=[];
   (function walk(x){
@@ -120,7 +120,7 @@ async function espnTeamSchedule(name){
  if(!t){const words=n.split(' ').filter(Boolean);t=list.find(x=>words.length>=2&&words.every(w=>norm(x.displayName).includes(w))); }
  if(!t||!t.id)return[];
  try{
-  const r=await fetch('https://site.web.api.espn.com/apis/site/v2/sports/soccer/all/teams/'+encodeURIComponent(t.id)+'/schedule');
+  const r=await fetch('https://site.api.espn.com/apis/site/v2/sports/soccer/all/teams/'+encodeURIComponent(t.id)+'/schedule');
   if(!r.ok)return[];
   const d=await r.json(),events=d.events||[],out=[];
   for(const e of events){
