@@ -279,7 +279,19 @@ async function lastMatches(t){
  };
  return clean(all).slice(0,3);
 }
-function statsFromEvents(t,events){let gf=0,ga=0,w=0,d=0,l=0,n=0;const rows=[];for(const e of events){const hs=parseInt(e.intHomeScore),as=parseInt(e.intAwayScore);if(!Number.isFinite(hs)||!Number.isFinite(as))continue;const home=e.idHomeTeam===t.idTeam||e.strHomeTeam===t.strTeam,scored=home?hs:as,conceded=home?as:hs;gf+=scored;ga+=conceded;n++;if(scored>conceded)w++;else if(scored===conceded)d++;else l++;rows.push({date:e.dateEvent||'',opp:home?e.strAwayTeam:e.strHomeTeam,score:scored+' - '+conceded,result:scored>conceded?'W':scored===conceded?'D':'L'});}return{gf,ga,w,d,l,n,rows};}
+function statsFromEvents(t,events){
+ let gf=0,ga=0,w=0,d=0,l=0,n=0;const rows=[];const target=normName(t.strTeam);
+ for(const e of events){
+  const hs=Number(e.intHomeScore),as=Number(e.intAwayScore);if(!Number.isFinite(hs)||!Number.isFinite(as))continue;
+  const home=String(e.idHomeTeam||'')===String(t.idTeam||'')||normName(e.strHomeTeam)===target;
+  const away=!home&&(String(e.idAwayTeam||'')===String(t.idTeam||'')||normName(e.strAwayTeam)===target);
+  if(!home&&!away)continue;
+  const scored=home?hs:as,conceded=home?as:hs;gf+=scored;ga+=conceded;n++;
+  if(scored>conceded)w++;else if(scored===conceded)d++;else l++;
+  rows.push({date:e.dateEvent||'',opp:home?e.strAwayTeam:e.strHomeTeam,score:scored+' - '+conceded,result:scored>conceded?'W':scored===conceded?'D':'L'});
+ }
+ return{gf,ga,w,d,l,n,rows};
+}
 function pct(x){return (Number(x)*100).toFixed(1)+'%';}
 function poisson(k,lambda){const l=Math.max(0.0001,Number(lambda));let p=Math.exp(-l);for(let i=1;i<=k;i++)p*=l/i;return p;}
 async function predict(){
@@ -302,7 +314,7 @@ async function predict(){
  document.getElementById('scores').innerHTML=rows.slice(0,3).map(x=>'<tr><td><b>'+x.h+' – '+x.a+'</b></td><td class="prob">'+pct(x.p)+'</td></tr>').join('');
  const recent=[...hs.rows.slice(0,5).map(x=>({club:teams.home.strTeam,...x})),...as.rows.slice(0,5).map(x=>({club:teams.away.strTeam,...x}))];document.getElementById('recent').innerHTML=recent.length?recent.map(x=>'<tr><td><b>'+esc(x.club)+'</b></td><td>'+esc(x.opp||'—')+'</td><td><b>'+x.score+'</b> <small>('+x.result+')</small></td></tr>').join(''):'<tr><td colspan="3">Aucun résultat exploitable disponible.</td></tr>';
  document.getElementById('result').style.display='block';document.getElementById('result').scrollIntoView({behavior:'smooth',block:'start'});setStatus('Analyse terminée : les données affichées proviennent des données disponibles, sans inventer les statistiques manquantes.');
- }catch(e){setStatus(e.message==='MIN3'?'Analyse bloquée : KAIRO PRONO n’a pas trouvé 3 résultats récents exploitables pour chacune des deux équipes, même après les sources automatiques disponibles.':'Une erreur est survenue pendant l’analyse. Réessaie dans quelques secondes.','err');}
+ }catch(e){console.error('KAIRO PRONO analyse error',e);setStatus(e.message==='MIN3'?'Analyse bloquée : KAIRO PRONO n’a pas trouvé 3 résultats récents exploitables pour chacune des deux équipes, même après les sources automatiques disponibles.':'Erreur technique : '+(e&&e.message?e.message:'erreur inconnue')+'. Réessaie après avoir actualisé la page.','err');}
  finally{btn.disabled=!(teams.home&&teams.away);btn.textContent='⚡ ANALYSER LE MATCH';}
 }
 document.getElementById('hSearch').addEventListener('keydown',e=>{if(e.key==='Enter')loadTeam('home')});document.getElementById('aSearch').addEventListener('keydown',e=>{if(e.key==='Enter')loadTeam('away')});
