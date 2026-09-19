@@ -279,24 +279,6 @@ async function lastMatches(t){
  };
  return clean(all).slice(0,3);
 }
-async function headToHead(home,away){
- const all=[];
- for(const season of seasonCandidates()){
-  if(home.idLeague)all.push(...await fetchSeason(home,season));
-  if(away.idLeague&&String(away.idLeague)!==String(home.idLeague))all.push(...await fetchSeason(away,season));
- }
- const seen=new Set(),out=[];
- for(const e of all){
-  const key=e.idEvent||((e.dateEvent||'')+'|'+(e.idHomeTeam||'')+'|'+(e.idAwayTeam||''));
-  if(seen.has(key))continue;seen.add(key);
-  const ids=[String(e.idHomeTeam||''),String(e.idAwayTeam||'')];
-  if(ids.includes(String(home.idTeam))&&ids.includes(String(away.idTeam))){
-   const hs=parseInt(e.intHomeScore),as=parseInt(e.intAwayScore);
-   if(Number.isFinite(hs)&&Number.isFinite(as))out.push(e);
-  }
- }
- return out.sort((a,b)=>String(b.dateEvent||'').localeCompare(String(a.dateEvent||''))).slice(0,5);
-}
 function statsFromEvents(t,events){let gf=0,ga=0,w=0,d=0,l=0,n=0;const rows=[];for(const e of events){const hs=parseInt(e.intHomeScore),as=parseInt(e.intAwayScore);if(!Number.isFinite(hs)||!Number.isFinite(as))continue;const home=e.idHomeTeam===t.idTeam||e.strHomeTeam===t.strTeam,scored=home?hs:as,conceded=home?as:hs;gf+=scored;ga+=conceded;n++;if(scored>conceded)w++;else if(scored===conceded)d++;else l++;rows.push({date:e.dateEvent||'',opp:home?e.strAwayTeam:e.strHomeTeam,score:scored+' - '+conceded,result:scored>conceded?'W':scored===conceded?'D':'L'});}return{gf,ga,w,d,l,n,rows};}
 async function predict(){
  if(!teams.home||!teams.away){setStatus('Charge les deux clubs avant de lancer l’analyse.','err');return;}const btn=document.getElementById('analyseBtn');btn.disabled=true;btn.textContent='⏳ ANALYSE EN COURS…';setStatus('Recherche automatique des 5 derniers résultats, toutes compétitions…');
