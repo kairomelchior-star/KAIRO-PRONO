@@ -109,7 +109,7 @@ const SOFA='https://api.sofascore.com/api/v1';
 const sofaCache=new Map();
 
 function normName(s){
- return String(s||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+ return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
 }
 
 async function sofaSearchTeam(name){
