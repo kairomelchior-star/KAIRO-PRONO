@@ -57,7 +57,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px 8px;border-bottom:1
 <h3>🧮 Indicateurs du modèle</h3><div class="metrics"><div class="metric"><b id="xgH">—</b><span>Buts attendus domicile</span></div><div class="metric"><b id="xgA">—</b><span>Buts attendus extérieur</span></div><div class="metric"><b id="totalG">—</b><span>Total attendu</span></div><div class="metric"><b id="btts">—</b><span>Deux équipes marquent</span></div></div>
 <h3>🎯 Top 3 des scores exacts</h3><table><thead><tr><th>Score</th><th>Probabilité</th></tr></thead><tbody id="scores"></tbody></table>
 <h3>🗓️ Derniers matchs disponibles</h3><table><thead><tr><th>Club</th><th>Adversaire</th><th>Score</th></tr></thead><tbody id="recent"></tbody></table>
-<div class="disclaimer">ℹ️ <b>Source automatique :</b> les informations de club et logos sont récupérés via TheSportsDB. Pour les 5 derniers résultats, KAIRO PRONO utilise d'abord TheSportsDB puis, si nécessaire, un calendrier public ESPN en secours pour couvrir toutes les compétitions. Si aucune donnée exploitable n'est trouvée, le système bloque l'analyse au lieu d'inventer une statistique. Le score exact reste une estimation probabiliste, jamais une certitude.</div>
+<div class="disclaimer">ℹ️ <b>Source automatique :</b> les informations de club et logos sont récupérés via TheSportsDB. Pour les 5 derniers résultats, KAIRO PRONO croise automatiquement TheSportsDB, puis FotMob et ESPN en secours afin de couvrir les compétitions manquantes. Si aucune donnée exploitable n'est trouvée, le système bloque l'analyse au lieu d'inventer une statistique. Le score exact reste une estimation probabiliste, jamais une certitude.</div>
 </section></main><footer>© 2026 KAIRO PRONO — Football Analytics • Données : TheSportsDB</footer>
 <script>
 const API='https://www.thesportsdb.com/api/v1/json/123/';const teams={home:null,away:null};
@@ -135,11 +135,51 @@ async function espnTeamSchedule(name){
   return out.sort((a,b)=>String(b.dateEvent||'').localeCompare(String(a.dateEvent||''))).slice(0,10);
  }catch(e){return[];}
 }
+async function fotmobSearchTeam(name){
+ try{
+  const r=await fetch('https://www.fotmob.com/api/searchData?term='+encodeURIComponent(name));
+  if(!r.ok)return null;
+  const d=await r.json(),norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim(),n=norm(name);
+  const found=[];
+  (function walk(x){
+   if(!x||typeof x!=='object')return;
+   if(x.id&&(x.name||x.shortName||x.displayName)){
+    const nm=x.name||x.shortName||x.displayName;
+    if(norm(nm)===n||norm(nm).includes(n)||n.includes(norm(nm)))found.push(x);
+   }
+   if(Array.isArray(x))x.forEach(walk);else Object.keys(x).forEach(k=>walk(x[k]));
+  })(d);
+  return found.find(x=>x.id&&((x.name||'').toLowerCase().includes(n.split(' ')[0])))||found[0]||null;
+ }catch(e){return null;}
+}
+async function fotmobTeamSchedule(name){
+ const t=await fotmobSearchTeam(name);if(!t||!t.id)return[];
+ try{
+  const r=await fetch('https://www.fotmob.com/api/teams?id='+encodeURIComponent(t.id));
+  if(!r.ok)return[];
+  const d=await r.json(),norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim(),target=norm(name),out=[];
+  const push=(o)=>{
+   if(!o||typeof o!=='object'||!o.home||!o.away)return;
+   const hn=o.home.name||o.home.shortName||'',an=o.away.name||o.away.shortName||'';
+   const hs=parseInt(o.home.score),as=parseInt(o.away.score);
+   const finished=o.status&&o.status.finished!==false;
+   if(!hn||!an||!finished||!Number.isFinite(hs)||!Number.isFinite(as))return;
+   if(norm(hn)!==target&&norm(an)!==target&&norm(hn)!==norm(t.name||'')&&norm(an)!==norm(t.name||''))return;
+   out.push({idEvent:'fotmob-'+String(o.id||o.matchId||Date.now())+'-'+out.length,dateEvent:String(o.status&&o.status.utcTime||o.date||'').slice(0,10),strHomeTeam:hn,strAwayTeam:an,idHomeTeam:String(o.home.id||''),idAwayTeam:String(o.away.id||''),intHomeScore:hs,intAwayScore:as});
+  };
+  (function walk(x){
+   if(!x||typeof x!=='object')return;
+   if(Array.isArray(x))x.forEach(walk);else{push(x);Object.keys(x).forEach(k=>walk(x[k]));}
+  })(d);
+  const seen=new Set();
+  return out.filter(e=>{const k=e.idEvent;if(seen.has(k))return false;seen.add(k);return true;}).sort((a,b)=>String(b.dateEvent).localeCompare(String(a.dateEvent))).slice(0,10);
+ }catch(e){return[];}
+}
 async function lastMatches(t){
  const all=[];
  try{const r=await fetch(API+'eventslast.php?id='+encodeURIComponent(t.idTeam));if(r.ok){const d=await r.json();all.push(...(d.results||[]));}}catch(e){}
  for(const season of seasonCandidates())all.push(...await fetchSeason(t,season,t.idLeague));
- const normalize=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+ const normalize=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
  const clean=arr=>{
   const seen=new Set();
   return arr.filter(e=>{
@@ -152,6 +192,7 @@ async function lastMatches(t){
   }).sort((a,b)=>String(b.dateEvent||'').localeCompare(String(a.dateEvent||'')));
  };
  let merged=clean(all);
+ if(merged.length<5)merged=clean([...merged,...await fotmobTeamSchedule(t.strTeam)]);
  if(merged.length<5)merged=clean([...merged,...await espnTeamSchedule(t.strTeam)]);
  return merged.slice(0,5);
 }
@@ -190,7 +231,7 @@ async function predict(){
  // Le face-à-face est secondaire : il ajuste le résultat sans remplacer la forme récente.
  if(h2h.n){const hh=h2h.hg/h2h.n,ha=h2h.ag/h2h.n;lh=lh*.80+hh*.20;la=la*.80+ha*.20;}
  lh=Math.max(.05,Math.min(5,lh));la=Math.max(.05,Math.min(5,la));
- const quality='Bonne : le moteur recherche automatiquement au minimum les 5 derniers résultats exploitables de chaque équipe, toutes compétitions confondues. TheSportsDB est prioritaire ; ESPN sert uniquement de secours si la source principale est insuffisante. La forme récente et les buts ont le poids principal ; le face-à-face sert d’ajustement secondaire.';
+ const quality='Bonne : le moteur recherche automatiquement au minimum les 5 derniers résultats exploitables de chaque équipe, toutes compétitions confondues. TheSportsDB est prioritaire ; FotMob puis ESPN servent de sources de secours si la source principale est insuffisante. La forme récente et les buts ont le poids principal ; le face-à-face sert d’ajustement secondaire.';
  let rows=[],total=0,ph=0,pd=0,pa=0,btts=0;for(let h=0;h<=10;h++)for(let a=0;a<=10;a++){const p=poisson(h,lh)*poisson(a,la);rows.push({h,a,p});total+=p}rows.forEach(x=>{x.p/=total;if(x.h>x.a)ph+=x.p;else if(x.h===x.a)pd+=x.p;else pa+=x.p;if(x.h>0&&x.a>0)btts+=x.p});rows.sort((x,y)=>y.p-x.p);
  document.getElementById('homeName').textContent=teams.home.strTeam;document.getElementById('awayName').textContent=teams.away.strTeam;document.getElementById('rhClub').textContent=teams.home.strTeam;document.getElementById('raClub').textContent=teams.away.strTeam;document.getElementById('rhLogo').src=teams.home.strBadge||teams.home.strLogo||'';document.getElementById('raLogo').src=teams.away.strBadge||teams.away.strLogo||'';
  document.getElementById('rhInfo').textContent=(teams.home.strLeague||'—')+' • '+(teams.home.strCountry||'—')+' • '+(teams.home.strStadium||'—');document.getElementById('raInfo').textContent=(teams.away.strLeague||'—')+' • '+(teams.away.strCountry||'—')+' • '+(teams.away.strStadium||'—');
