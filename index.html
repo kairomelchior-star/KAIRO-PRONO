@@ -48,7 +48,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px 8px;border-bottom:1
 <div id="dailyMatches" style="display:grid;gap:12px;margin-top:14px"></div>
 </section>
 <section class="card result" id="result">
-<div class="section-head"><div class="icon">📊</div><div><h2>Rapport KAIRO PRONO</h2><div class="sub">5 derniers matchs minimum + face-à-face + modèle probabiliste</div></div></div>
+<div class="section-head"><div class="icon">📊</div><div><h2>Rapport KAIRO PRONO</h2><div class="sub">5 derniers résultats toutes compétitions + face-à-face + modèle probabiliste</div></div></div>
 <div class="match-banner"><span id="homeName"></span><div class="vs">VS</div><span id="awayName"></span></div>
 <div class="club-summary"><div class="summary"><div class="summary-head"><img id="rhLogo" alt=""><span id="rhClub">—</span></div><small id="rhInfo">—</small><div id="hForm" class="form-list"></div></div><div class="summary"><div class="summary-head"><img id="raLogo" alt=""><span id="raClub">—</span></div><small id="raInfo">—</small><div id="aForm" class="form-list"></div></div></div>
 <div class="scorebox"><div class="label">SCORE EXACT LE PLUS PROBABLE</div><div class="score" id="best">—</div><div class="badge">Modèle probabiliste KAIRO</div></div>
@@ -87,23 +87,45 @@ function seasonCandidates(){
  const previous=m>=7?(y-1)+"-"+y:(y-2)+"-"+(y-1);
  return [current,previous];
 }
-async function fetchSeason(t,season){
- if(!t.idLeague)return[];
+async function fetchSeason(t,season,leagueId){
+ const lid=leagueId||t.idLeague;if(!lid)return[];
  try{
-  const r=await fetch(API+'eventsseason.php?id='+encodeURIComponent(t.idLeague)+'&s='+encodeURIComponent(season));
+  const r=await fetch(API+'eventsseason.php?id='+encodeURIComponent(lid)+'&s='+encodeURIComponent(season));
   if(!r.ok)return[];
   const d=await r.json();return d.events||[];
  }catch(e){return[];}
 }
+async function fetchCountryLeagues(t){
+ if(!t.strCountry)return[];
+ try{
+  const r=await fetch(API+'search_all_leagues.php?c='+encodeURIComponent(t.strCountry)+'&s=Soccer');
+  if(!r.ok)return[];
+  const d=await r.json();
+  return (d.countryleagues||[]).map(x=>({idLeague:x.idLeague,strLeague:x.strLeague})).filter(x=>x.idLeague).slice(0,10);
+ }catch(e){return[];}
+}
 async function lastMatches(t){
  const all=[];
+ // 1) Dernier résultat direct fourni par TheSportsDB.
  try{const r=await fetch(API+'eventslast.php?id='+encodeURIComponent(t.idTeam));if(r.ok){const d=await r.json();all.push(...(d.results||[]));}}catch(e){}
- for(const season of seasonCandidates()){all.push(...await fetchSeason(t,season));}
+ // 2) Saison actuelle + précédente de la compétition principale.
+ for(const season of seasonCandidates())all.push(...await fetchSeason(t,season,t.idLeague));
+ // 3) Recherche automatique élargie : autres compétitions du même pays.
+ // Cela permet de récupérer coupe/coupe de la ligue/autres compétitions quand elles existent dans TheSportsDB.
+ const leagues=await fetchCountryLeagues(t);
+ const seasons=seasonCandidates().slice(0,1);
+ const extra=[];
+ for(const lg of leagues){
+  if(String(lg.idLeague)===String(t.idLeague))continue;
+  for(const season of seasons)extra.push(fetchSeason(t,season,lg.idLeague));
+ }
+ if(extra.length)all.push(...(await Promise.all(extra)).flat());
  const seen=new Set();
  return all.filter(e=>{
   const key=e.idEvent||((e.dateEvent||'')+'|'+(e.idHomeTeam||'')+'|'+(e.idAwayTeam||''));
   if(seen.has(key))return false;seen.add(key);
-  const h=e.idHomeTeam===t.idTeam||e.strHomeTeam===t.strTeam,a=e.idAwayTeam===t.idTeam||e.strAwayTeam===t.strTeam;
+  const h=String(e.idHomeTeam||'')===String(t.idTeam)||e.strHomeTeam===t.strTeam;
+  const a=String(e.idAwayTeam||'')===String(t.idTeam)||e.strAwayTeam===t.strTeam;
   const hs=parseInt(e.intHomeScore),as=parseInt(e.intAwayScore);
   return (h||a)&&Number.isFinite(hs)&&Number.isFinite(as);
  }).sort((a,b)=>String(b.dateEvent||'').localeCompare(String(a.dateEvent||''))).slice(0,5);
@@ -133,8 +155,8 @@ function h2hStats(home,away,events){
  return{hg,ag,n,hw,dr,aw};
 }
 async function predict(){
- if(!teams.home||!teams.away){setStatus('Charge les deux clubs avant de lancer l’analyse.','err');return;}const btn=document.getElementById('analyseBtn');btn.disabled=true;btn.textContent='⏳ ANALYSE EN COURS…';setStatus('Récupération des résultats disponibles…');
- try{setStatus('Récupération des 5 derniers matchs de chaque équipe et des face-à-face…');const[he,ae,h2he]=await Promise.all([lastMatches(teams.home),lastMatches(teams.away),headToHead(teams.home,teams.away)]),hs=statsFromEvents(teams.home,he),as=statsFromEvents(teams.away,ae),h2h=h2hStats(teams.home,teams.away,h2he);if(hs.n<5||as.n<5)throw new Error('MIN5');
+ if(!teams.home||!teams.away){setStatus('Charge les deux clubs avant de lancer l’analyse.','err');return;}const btn=document.getElementById('analyseBtn');btn.disabled=true;btn.textContent='⏳ ANALYSE EN COURS…';setStatus('Recherche automatique des 5 derniers résultats, toutes compétitions…');
+ try{setStatus('Recherche des 5 derniers résultats de chaque équipe, toutes compétitions confondues, puis des face-à-face…');const[he,ae,h2he]=await Promise.all([lastMatches(teams.home),lastMatches(teams.away),headToHead(teams.home,teams.away)]),hs=statsFromEvents(teams.home,he),as=statsFromEvents(teams.away,ae),h2h=h2hStats(teams.home,teams.away,h2he);if(hs.n<5||as.n<5)throw new Error('MIN5');
  const hGF=hs.gf/hs.n,hGA=hs.ga/hs.n,aGF=as.gf/as.n,aGA=as.ga/as.n;
  const hForm=((hs.w*3+hs.d)/hs.n)/3,aForm=((as.w*3+as.d)/as.n)/3;
  // Base principale = forme et buts des 5 derniers matchs minimum.
@@ -143,18 +165,18 @@ async function predict(){
  // Le face-à-face est secondaire : il ajuste le résultat sans remplacer la forme récente.
  if(h2h.n){const hh=h2h.hg/h2h.n,ha=h2h.ag/h2h.n;lh=lh*.80+hh*.20;la=la*.80+ha*.20;}
  lh=Math.max(.05,Math.min(5,lh));la=Math.max(.05,Math.min(5,la));
- const quality='Bonne : le moteur utilise au minimum les 5 derniers résultats de chaque équipe. La forme récente et les buts ont le poids principal ; le face-à-face sert d’ajustement secondaire.';
+ const quality='Bonne : le moteur recherche automatiquement au minimum les 5 derniers résultats exploitables de chaque équipe, toutes compétitions disponibles confondues. La forme récente et les buts ont le poids principal ; le face-à-face sert d’ajustement secondaire.';
  let rows=[],total=0,ph=0,pd=0,pa=0,btts=0;for(let h=0;h<=10;h++)for(let a=0;a<=10;a++){const p=poisson(h,lh)*poisson(a,la);rows.push({h,a,p});total+=p}rows.forEach(x=>{x.p/=total;if(x.h>x.a)ph+=x.p;else if(x.h===x.a)pd+=x.p;else pa+=x.p;if(x.h>0&&x.a>0)btts+=x.p});rows.sort((x,y)=>y.p-x.p);
  document.getElementById('homeName').textContent=teams.home.strTeam;document.getElementById('awayName').textContent=teams.away.strTeam;document.getElementById('rhClub').textContent=teams.home.strTeam;document.getElementById('raClub').textContent=teams.away.strTeam;document.getElementById('rhLogo').src=teams.home.strBadge||teams.home.strLogo||'';document.getElementById('raLogo').src=teams.away.strBadge||teams.away.strLogo||'';
  document.getElementById('rhInfo').textContent=(teams.home.strLeague||'—')+' • '+(teams.home.strCountry||'—')+' • '+(teams.home.strStadium||'—');document.getElementById('raInfo').textContent=(teams.away.strLeague||'—')+' • '+(teams.away.strCountry||'—')+' • '+(teams.away.strStadium||'—');
  document.getElementById('hForm').innerHTML=hs.rows.slice(0,5).map(x=>'<span class="form '+x.result+'">'+x.result+'</span>').join('')||'<small>Forme non disponible</small>';document.getElementById('aForm').innerHTML=as.rows.slice(0,5).map(x=>'<span class="form '+x.result+'">'+x.result+'</span>').join('')||'<small>Forme non disponible</small>';
- document.getElementById('best').textContent=teams.home.strTeam+' '+rows[0].h+' – '+rows[0].a+' '+teams.away.strTeam;document.getElementById('pHome').textContent=pct(ph);document.getElementById('pDraw').textContent=pct(pd);document.getElementById('pAway').textContent=pct(pa);document.getElementById('dataQuality').innerHTML='<strong>Qualité des données : Bonne</strong><span>'+quality+' Résultats utilisés : 5 pour '+esc(teams.home.strTeam)+' et 5 pour '+esc(teams.away.strTeam)+'.</span>';document.getElementById('h2hQuality').innerHTML='<strong>🤝 Face à face</strong><span>'+ (h2h.n ? h2h.n+' confrontation(s) récente(s) intégrée(s) comme ajustement secondaire.' : 'Aucune confrontation exploitable trouvée : le modèle ne l’invente pas.')+'</span>';
+ document.getElementById('best').textContent=teams.home.strTeam+' '+rows[0].h+' – '+rows[0].a+' '+teams.away.strTeam;document.getElementById('pHome').textContent=pct(ph);document.getElementById('pDraw').textContent=pct(pd);document.getElementById('pAway').textContent=pct(pa);document.getElementById('dataQuality').innerHTML='<strong>Qualité des données : Bonne</strong><span>'+quality+' Résultats utilisés automatiquement : 5 pour '+esc(teams.home.strTeam)+' et 5 pour '+esc(teams.away.strTeam)+'.</span>';document.getElementById('h2hQuality').innerHTML='<strong>🤝 Face à face</strong><span>'+ (h2h.n ? h2h.n+' confrontation(s) récente(s) intégrée(s) comme ajustement secondaire.' : 'Aucune confrontation exploitable trouvée : le modèle ne l’invente pas.')+'</span>';
  document.getElementById('hStatsTitle').textContent=teams.home.strTeam;document.getElementById('aStatsTitle').textContent=teams.away.strTeam;document.getElementById('hStats').textContent=(hs.n?hs.n+' résultat(s) • ':'')+'Buts marqués: '+hGF.toFixed(2)+' / match • encaissés: '+hGA.toFixed(2)+' • W/D/L: '+hs.w+'/'+hs.d+'/'+hs.l;document.getElementById('aStats').textContent=(as.n?as.n+' résultat(s) • ':'')+'Buts marqués: '+aGF.toFixed(2)+' / match • encaissés: '+aGA.toFixed(2)+' • W/D/L: '+as.w+'/'+as.d+'/'+as.l;
  document.getElementById('xgH').textContent=lh.toFixed(2);document.getElementById('xgA').textContent=la.toFixed(2);document.getElementById('totalG').textContent=(lh+la).toFixed(2);document.getElementById('btts').textContent=pct(btts);
  document.getElementById('scores').innerHTML=rows.slice(0,3).map(x=>'<tr><td><b>'+x.h+' – '+x.a+'</b></td><td class="prob">'+pct(x.p)+'</td></tr>').join('');
  const recent=[...hs.rows.slice(0,5).map(x=>({club:teams.home.strTeam,...x})),...as.rows.slice(0,5).map(x=>({club:teams.away.strTeam,...x}))];document.getElementById('recent').innerHTML=recent.length?recent.map(x=>'<tr><td><b>'+esc(x.club)+'</b></td><td>'+esc(x.opp||'—')+'</td><td><b>'+x.score+'</b> <small>('+x.result+')</small></td></tr>').join(''):'<tr><td colspan="3">Aucun résultat exploitable disponible.</td></tr>';
  document.getElementById('result').style.display='block';document.getElementById('result').scrollIntoView({behavior:'smooth',block:'start'});setStatus('Analyse terminée : les données affichées proviennent des données disponibles, sans inventer les statistiques manquantes.');
- }catch(e){setStatus(e.message==='MIN5'?'Analyse bloquée : KAIRO PRONO exige au minimum 5 matchs récents exploitables pour chacune des deux équipes avant de calculer une prédiction.':'Une erreur est survenue pendant l’analyse. Réessaie dans quelques secondes.','err');}
+ }catch(e){setStatus(e.message==='MIN5'?'Analyse bloquée : KAIRO PRONO n’a pas trouvé 5 résultats récents exploitables pour chacune des deux équipes, même après la recherche automatique toutes compétitions.':'Une erreur est survenue pendant l’analyse. Réessaie dans quelques secondes.','err');}
  finally{btn.disabled=!(teams.home&&teams.away);btn.textContent='⚡ ANALYSER LE MATCH';}
 }
 document.getElementById('hSearch').addEventListener('keydown',e=>{if(e.key==='Enter')loadTeam('home')});document.getElementById('aSearch').addEventListener('keydown',e=>{if(e.key==='Enter')loadTeam('away')});
