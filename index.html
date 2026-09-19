@@ -56,7 +56,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px 8px;border-bottom:1
 <h3>🧮 Indicateurs du modèle</h3><div class="metrics"><div class="metric"><b id="xgH">—</b><span>Buts attendus domicile</span></div><div class="metric"><b id="xgA">—</b><span>Buts attendus extérieur</span></div><div class="metric"><b id="totalG">—</b><span>Total attendu</span></div><div class="metric"><b id="btts">—</b><span>Deux équipes marquent</span></div></div>
 <h3>🎯 Top 3 des scores exacts</h3><table><thead><tr><th>Score</th><th>Probabilité</th></tr></thead><tbody id="scores"></tbody></table>
 <h3>🗓️ Derniers matchs disponibles</h3><table><thead><tr><th>Club</th><th>Adversaire</th><th>Score</th></tr></thead><tbody id="recent"></tbody></table>
-<div class="disclaimer">ℹ️ <b>Source automatique :</b> les informations de club et logos sont récupérés via TheSportsDB. Pour les 3 derniers résultats, KAIRO PRONO croise automatiquement SofaScore et FotMob, puis TheSportsDB en complément. Les résultats sont dédoublonnés et recherchés toutes compétitions confondues ; si 5 résultats exploitables ne sont pas disponibles, l'analyse reste bloquée plutôt que d'inventer une statistique. Si aucune donnée exploitable n'est trouvée dans les sources disponibles, le système bloque l'analyse au lieu d'inventer une statistique. Le score exact reste une estimation probabiliste, jamais une certitude.</div>
+<div class="disclaimer">ℹ️ <b>Source automatique :</b> les informations de club et logos sont récupérés via TheSportsDB. Pour les 3 derniers résultats, KAIRO PRONO croise automatiquement SofaScore et FotMob, puis TheSportsDB en complément. Les résultats sont dédoublonnés et recherchés toutes compétitions confondues ; si 3 résultats exploitables ne sont pas disponibles, l'analyse reste bloquée plutôt que d'inventer une statistique. Si aucune donnée exploitable n'est trouvée dans les sources disponibles, le système bloque l'analyse au lieu d'inventer une statistique. Le score exact reste une estimation probabiliste, jamais une certitude.</div>
 </section></main><footer>© 2026 KAIRO PRONO — Football Analytics • Données : SofaScore • FotMob • TheSportsDB</footer>
 <script>
 const API='https://www.thesportsdb.com/api/v1/json/123/';const teams={home:null,away:null};
@@ -281,11 +281,11 @@ async function lastMatches(t){
 }
 function statsFromEvents(t,events){let gf=0,ga=0,w=0,d=0,l=0,n=0;const rows=[];for(const e of events){const hs=parseInt(e.intHomeScore),as=parseInt(e.intAwayScore);if(!Number.isFinite(hs)||!Number.isFinite(as))continue;const home=e.idHomeTeam===t.idTeam||e.strHomeTeam===t.strTeam,scored=home?hs:as,conceded=home?as:hs;gf+=scored;ga+=conceded;n++;if(scored>conceded)w++;else if(scored===conceded)d++;else l++;rows.push({date:e.dateEvent||'',opp:home?e.strAwayTeam:e.strHomeTeam,score:scored+' - '+conceded,result:scored>conceded?'W':scored===conceded?'D':'L'});}return{gf,ga,w,d,l,n,rows};}
 async function predict(){
- if(!teams.home||!teams.away){setStatus('Charge les deux clubs avant de lancer l’analyse.','err');return;}const btn=document.getElementById('analyseBtn');btn.disabled=true;btn.textContent='⏳ ANALYSE EN COURS…';setStatus('Recherche automatique des 5 derniers résultats, toutes compétitions…');
- try{setStatus('Recherche des 5 derniers résultats de chaque équipe, toutes compétitions confondues, …');const[he,ae]=await Promise.all([lastMatches(teams.home),lastMatches(teams.away)]),hs=statsFromEvents(teams.home,he),as=statsFromEvents(teams.away,ae);if(hs.n<3||as.n<3)throw new Error('MIN3');
+ if(!teams.home||!teams.away){setStatus('Charge les deux clubs avant de lancer l’analyse.','err');return;}const btn=document.getElementById('analyseBtn');btn.disabled=true;btn.textContent='⏳ ANALYSE EN COURS…';setStatus('Recherche automatique des 3 derniers résultats, toutes compétitions…');
+ try{setStatus('Recherche des 3 derniers résultats de chaque équipe, toutes compétitions confondues, …');const[he,ae]=await Promise.all([lastMatches(teams.home),lastMatches(teams.away)]),hs=statsFromEvents(teams.home,he),as=statsFromEvents(teams.away,ae);if(hs.n<3||as.n<3)throw new Error('MIN3');
  const hGF=hs.gf/hs.n,hGA=hs.ga/hs.n,aGF=as.gf/as.n,aGA=as.ga/as.n;
  const hForm=((hs.w*3+hs.d)/hs.n)/3,aForm=((as.w*3+as.d)/as.n)/3;
- // Base principale = forme et buts des 5 derniers matchs minimum.
+ // Base principale = forme et buts des 3 derniers matchs minimum.
  let lh=(hGF*.55+aGA*.45)*1.06,la=(aGF*.55+hGA*.45)*.94;
  lh*=1+(hForm-.5)*.10;la*=1+(aForm-.5)*.10;
  lh=Math.max(.05,Math.min(5,lh));la=Math.max(.05,Math.min(5,la));
@@ -300,7 +300,7 @@ async function predict(){
  document.getElementById('scores').innerHTML=rows.slice(0,3).map(x=>'<tr><td><b>'+x.h+' – '+x.a+'</b></td><td class="prob">'+pct(x.p)+'</td></tr>').join('');
  const recent=[...hs.rows.slice(0,5).map(x=>({club:teams.home.strTeam,...x})),...as.rows.slice(0,5).map(x=>({club:teams.away.strTeam,...x}))];document.getElementById('recent').innerHTML=recent.length?recent.map(x=>'<tr><td><b>'+esc(x.club)+'</b></td><td>'+esc(x.opp||'—')+'</td><td><b>'+x.score+'</b> <small>('+x.result+')</small></td></tr>').join(''):'<tr><td colspan="3">Aucun résultat exploitable disponible.</td></tr>';
  document.getElementById('result').style.display='block';document.getElementById('result').scrollIntoView({behavior:'smooth',block:'start'});setStatus('Analyse terminée : les données affichées proviennent des données disponibles, sans inventer les statistiques manquantes.');
- }catch(e){setStatus(e.message==='MIN5'?'Analyse bloquée : KAIRO PRONO n’a pas trouvé 3 résultats récents exploitables pour chacune des deux équipes, même après les sources automatiques disponibles.':'Une erreur est survenue pendant l’analyse. Réessaie dans quelques secondes.','err');}
+ }catch(e){setStatus(e.message==='MIN3'?'Analyse bloquée : KAIRO PRONO n’a pas trouvé 3 résultats récents exploitables pour chacune des deux équipes, même après les sources automatiques disponibles.':'Une erreur est survenue pendant l’analyse. Réessaie dans quelques secondes.','err');}
  finally{btn.disabled=!(teams.home&&teams.away);btn.textContent='⚡ ANALYSER LE MATCH';}
 }
 document.getElementById('hSearch').addEventListener('keydown',e=>{if(e.key==='Enter')loadTeam('home')});document.getElementById('aSearch').addEventListener('keydown',e=>{if(e.key==='Enter')loadTeam('away')});
