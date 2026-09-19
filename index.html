@@ -89,10 +89,21 @@ function seasonCandidates(){
  const y=new Date().getFullYear(),m=new Date().getMonth()+1;
  const current=m>=7?y+"-"+(y+1):(y-1)+"-"+y;
  const previous=m>=7?(y-1)+"-"+y:(y-2)+"-"+(y-1);
- return [current,previous];
+ const older=m>=7?(y-2)+"-"+(y-1):(y-3)+"-"+(y-2);
+ return [current,previous,older];
+}
+async function fetchAvailableSeasons(t){
+ const lid=t&&t.idLeague;if(!lid)return[];
+ try{
+  const r=await fetch(API+'search_all_seasons.php?id='+encodeURIComponent(lid));
+  if(!r.ok)return[];
+  const d=await r.json();
+  const arr=(d.seasons||[]).map(x=>x.strSeason||x.strSeasonName||x.season).filter(Boolean);
+  return [...new Set(arr)].sort((a,b)=>String(b).localeCompare(String(a)));
+ }catch(e){return[];}
 }
 async function fetchSeason(t,season,leagueId){
- const lid=leagueId||t.idLeague;if(!lid)return[];
+ const lid=leagueId||t.idLeague;if(!lid||!season)return[];
  try{
   const r=await fetch(API+'eventsseason.php?id='+encodeURIComponent(lid)+'&s='+encodeURIComponent(season));
   if(!r.ok)return[];
@@ -268,7 +279,9 @@ async function lastMatches(t,limit=3){
   const r=await fetch(API+'eventslast.php?id='+encodeURIComponent(t.idTeam));
   if(r.ok){const d=await r.json();all.push(...(d.results||[]).map(e=>({...e,source:'TheSportsDB'})));}
  }catch(e){}
- for(const season of seasonCandidates())all.push(...await fetchSeason(t,season,t.idLeague));
+ const available=await fetchAvailableSeasons(t);
+ const seasons=[...new Set([...available,...seasonCandidates()])].slice(0,4);
+ for(const season of seasons)all.push(...await fetchSeason(t,season,t.idLeague));
 
  const clean=arr=>{
   const seen=new Set();
