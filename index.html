@@ -253,7 +253,7 @@ async function fotmobTeamMatches(name){
  }catch(e){return[];}
 }
 
-async function lastMatches(t){
+async function lastMatches(t,limit=3){
  const all=[];
  // 1) SofaScore : source principale des 5 derniers résultats toutes compétitions.
  const sofa=await sofaTeamMatches(t.strTeam);
@@ -282,7 +282,7 @@ async function lastMatches(t){
    return (h||a)&&Number.isFinite(hs)&&Number.isFinite(as);
   }).sort((a,b)=>String(b.dateEvent||'').localeCompare(String(a.dateEvent||'')));
  };
- return clean(all).slice(0,3);
+ return clean(all).slice(0,limit);
 }
 function venueStats(t,events,venue){
  const target=normName(t.strTeam),rows=events.filter(e=>{
