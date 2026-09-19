@@ -54,7 +54,11 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px 8px;border-bottom:1
 <div class="scorebox"><div class="label">SCORE EXACT LE PLUS PROBABLE</div><div class="score" id="best">—</div><div class="badge">Modèle probabiliste KAIRO</div></div>
 <div class="outcomes"><div class="outcome"><strong id="pHome">—</strong><span>Victoire domicile</span></div><div class="outcome"><strong id="pDraw">—</strong><span>Match nul</span></div><div class="outcome"><strong id="pAway">—</strong><span>Victoire extérieur</span></div></div><div id="dataQuality" class="quality"><strong>Qualité des données</strong><span>—</span></div><h3>📈 Statistiques calculées sur les résultats disponibles</h3><div class="club-summary"><div class="summary"><b id="hStatsTitle">Domicile</b><small id="hStats">—</small></div><div class="summary"><b id="aStatsTitle">Extérieur</b><small id="aStats">—</small></div></div>
 <h3>🧮 Indicateurs du modèle</h3><div class="metrics"><div class="metric"><b id="xgH">—</b><span>Buts attendus domicile</span></div><div class="metric"><b id="xgA">—</b><span>Buts attendus extérieur</span></div><div class="metric"><b id="totalG">—</b><span>Total attendu</span></div><div class="metric"><b id="btts">—</b><span>Deux équipes marquent</span></div></div>
-<h3>🎯 Marchés complémentaires</h3><div class="metrics"><div class="metric"><b id="o15">—</b><span>Plus de 1,5 buts</span></div><div class="metric"><b id="u15">—</b><span>Moins de 1,5 buts</span></div><div class="metric"><b id="o25">—</b><span>Plus de 2,5 buts</span></div><div class="metric"><b id="u25">—</b><span>Moins de 2,5 buts</span></div></div><div class="metrics" style="margin-top:10px"><div class="metric"><b id="bttsYes">—</b><span>Les deux marquent — Oui</span></div><div class="metric"><b id="bttsNo">—</b><span>Les deux marquent — Non</span></div><div class="metric"><b id="double1X">—</b><span>Double chance 1X</span></div><div class="metric"><b id="doubleX2">—</b><span>Double chance X2</span></div></div>
+<h3>🏠 Domicile / extérieur</h3>
+<div class="team-grid">
+<div class="team-card"><h4 id="venueHomeTitle">🏠 Domicile</h4><p id="venueHomeStats">—</p></div>
+<div class="team-card"><h4 id="venueAwayTitle">✈️ Extérieur</h4><p id="venueAwayStats">—</p></div>
+</div><h3>🎯 Marchés complémentaires</h3><div class="metrics"><div class="metric"><b id="o15">—</b><span>Plus de 1,5 buts</span></div><div class="metric"><b id="u15">—</b><span>Moins de 1,5 buts</span></div><div class="metric"><b id="o25">—</b><span>Plus de 2,5 buts</span></div><div class="metric"><b id="u25">—</b><span>Moins de 2,5 buts</span></div></div><div class="metrics" style="margin-top:10px"><div class="metric"><b id="bttsYes">—</b><span>Les deux marquent — Oui</span></div><div class="metric"><b id="bttsNo">—</b><span>Les deux marquent — Non</span></div><div class="metric"><b id="double1X">—</b><span>Double chance 1X</span></div><div class="metric"><b id="doubleX2">—</b><span>Double chance X2</span></div></div>
 <h3>🎯 Top 3 des scores exacts</h3><table><thead><tr><th>Score</th><th>Probabilité</th></tr></thead><tbody id="scores"></tbody></table>
 <h3>🗓️ Derniers matchs disponibles</h3><table><thead><tr><th>Club</th><th>Adversaire</th><th>Score</th></tr></thead><tbody id="recent"></tbody></table>
 <div class="disclaimer">ℹ️ <b>Source automatique :</b> les informations de club et logos sont récupérés via TheSportsDB. Pour les 3 derniers résultats, KAIRO PRONO croise automatiquement SofaScore et FotMob, puis TheSportsDB en complément. Les résultats sont dédoublonnés et recherchés toutes compétitions confondues ; si 3 résultats exploitables ne sont pas disponibles, l'analyse reste bloquée plutôt que d'inventer une statistique. Si aucune donnée exploitable n'est trouvée dans les sources disponibles, le système bloque l'analyse au lieu d'inventer une statistique. Le score exact reste une estimation probabiliste, jamais une certitude.</div>
@@ -279,6 +283,20 @@ async function lastMatches(t){
   }).sort((a,b)=>String(b.dateEvent||'').localeCompare(String(a.dateEvent||'')));
  };
  return clean(all).slice(0,3);
+}
+function venueStats(t,events,venue){
+ const target=normName(t.strTeam),rows=events.filter(e=>{
+  const h=String(e.idHomeTeam||'')===String(t.idTeam||'')||normName(e.strHomeTeam)===target;
+  const a=String(e.idAwayTeam||'')===String(t.idTeam||'')||normName(e.strAwayTeam)===target;
+  return venue==='home'?h:venue==='away'?a:(h||a);
+ });
+ let gf=0,ga=0,w=0,d=0,l=0;
+ rows.forEach(e=>{
+  const h=String(e.idHomeTeam||'')===String(t.idTeam||'')||normName(e.strHomeTeam)===target;
+  const s=Number(h?e.intHomeScore:e.intAwayScore),g=Number(h?e.intAwayScore:e.intHomeScore);
+  if(!Number.isFinite(s)||!Number.isFinite(g))return;gf+=s;ga+=g;if(s>g)w++;else if(s===g)d++;else l++;
+ });
+ return {n:rows.length,gf,ga,w,d,l};
 }
 function statsFromEvents(t,events){
  let gf=0,ga=0,w=0,d=0,l=0,n=0;const rows=[];const target=normName(t.strTeam);
