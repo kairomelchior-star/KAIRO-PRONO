@@ -57,8 +57,8 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px 8px;border-bottom:1
 <h3>🧮 Indicateurs du modèle</h3><div class="metrics"><div class="metric"><b id="xgH">—</b><span>Buts attendus domicile</span></div><div class="metric"><b id="xgA">—</b><span>Buts attendus extérieur</span></div><div class="metric"><b id="totalG">—</b><span>Total attendu</span></div><div class="metric"><b id="btts">—</b><span>Deux équipes marquent</span></div></div>
 <h3>🎯 Top 3 des scores exacts</h3><table><thead><tr><th>Score</th><th>Probabilité</th></tr></thead><tbody id="scores"></tbody></table>
 <h3>🗓️ Derniers matchs disponibles</h3><table><thead><tr><th>Club</th><th>Adversaire</th><th>Score</th></tr></thead><tbody id="recent"></tbody></table>
-<div class="disclaimer">ℹ️ <b>Source automatique :</b> les informations de club et logos sont récupérés via TheSportsDB. Pour les 5 derniers résultats, KAIRO PRONO croise automatiquement TheSportsDB, puis FotMob et ESPN en secours afin de couvrir les compétitions manquantes. Si aucune donnée exploitable n'est trouvée dans les sources disponibles, le système bloque l'analyse au lieu d'inventer une statistique. Le score exact reste une estimation probabiliste, jamais une certitude.</div>
-</section></main><footer>© 2026 KAIRO PRONO — Football Analytics • Données : TheSportsDB</footer>
+<div class="disclaimer">ℹ️ <b>Source automatique :</b> les informations de club et logos sont récupérés via TheSportsDB. Pour les 5 derniers résultats, KAIRO PRONO croise automatiquement SofaScore et FotMob, puis TheSportsDB en complément. Les résultats sont dédoublonnés et recherchés toutes compétitions confondues ; si 5 résultats exploitables ne sont pas disponibles, l'analyse reste bloquée plutôt que d'inventer une statistique. Si aucune donnée exploitable n'est trouvée dans les sources disponibles, le système bloque l'analyse au lieu d'inventer une statistique. Le score exact reste une estimation probabiliste, jamais une certitude.</div>
+</section></main><footer>© 2026 KAIRO PRONO — Football Analytics • Données : SofaScore • FotMob • TheSportsDB</footer>
 <script>
 const API='https://www.thesportsdb.com/api/v1/json/123/';const teams={home:null,away:null};
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
@@ -95,151 +95,190 @@ async function fetchSeason(t,season,leagueId){
   const d=await r.json();return d.events||[];
  }catch(e){return[];}
 }
-async function fetchEspnTeams(){
+
+// =========================
+// SOURCES FOOTBALL RECENTES
+// =========================
+// SofaScore : recherche du club puis historique paginé.
+// Cette source couvre les compétitions présentes dans le calendrier du club.
+const SOFA='https://www.sofascore.com/api/v1';
+const sofaCache=new Map();
+
+function normName(s){
+ return String(s||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+}
+
+async function sofaSearchTeam(name){
+ const key=normName(name);
+ if(sofaCache.has('team:'+key))return sofaCache.get('team:'+key);
  try{
-  const r=await fetch('https://site.api.espn.com/apis/site/v2/sports/soccer/all/teams?limit=1000');
-  if(!r.ok)return[];
-  const d=await r.json(),out=[];
-  (function walk(x){
+  const r=await fetch(SOFA+'/search/all?q='+encodeURIComponent(name),{headers:{'Accept':'application/json'}});
+  if(!r.ok)throw new Error('SOFA_SEARCH');
+  const d=await r.json();
+  const arr=[];
+  const walk=x=>{
    if(!x||typeof x!=='object')return;
-   if(x.team&&x.team.id&&x.team.displayName)out.push(x.team);
-   else if(x.id&&x.displayName&&x.links)out.push(x);
-   for(const k of Object.keys(x)){const v=x[k];if(v&&typeof v==='object')Array.isArray(v)?v.forEach(walk):walk(v);}
-  })(d);
-  const seen=new Set();
-  return out.filter(t=>{if(seen.has(String(t.id)))return false;seen.add(String(t.id));return true;});
- }catch(e){return[];}
-}
-let espnTeamsPromise=null;
-async function espnTeamSchedule(name){
- if(!espnTeamsPromise)espnTeamsPromise=fetchEspnTeams();
- const list=await espnTeamsPromise;
- const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
- const n=norm(name);
- let t=list.find(x=>norm(x.displayName)===n)||list.find(x=>norm(x.shortDisplayName)===n)||list.find(x=>norm(x.name)===n);
- if(!t){const words=n.split(' ').filter(Boolean);t=list.find(x=>words.length>=2&&words.every(w=>norm(x.displayName).includes(w))); }
- if(!t||!t.id)return[];
- try{
-  const r=await fetch('https://site.api.espn.com/apis/site/v2/sports/soccer/all/teams/'+encodeURIComponent(t.id)+'/schedule');
-  if(!r.ok)return[];
-  const d=await r.json(),events=d.events||[],out=[];
-  for(const e of events){
-   const comp=e.competitions&&e.competitions[0],cs=comp&&comp.competitors||[];
-   const hc=cs.find(x=>x.homeAway==='home'),ac=cs.find(x=>x.homeAway==='away');
-   if(!hc||!ac)continue;
-   const hs=parseInt(hc.score),as=parseInt(ac.score);
-   const completed=!!(e.status&&e.status.type&&e.status.type.completed);
-   if(!completed||!Number.isFinite(hs)||!Number.isFinite(as))continue;
-   out.push({idEvent:'espn-'+e.id,dateEvent:(e.date||'').slice(0,10),strHomeTeam:hc.team&&hc.team.displayName||'',strAwayTeam:ac.team&&ac.team.displayName||'',idHomeTeam:String(hc.team&&hc.team.id||''),idAwayTeam:String(ac.team&&ac.team.id||''),intHomeScore:hs,intAwayScore:as});
+   if(x.entity&&x.entity.id&&(x.entity.name||x.entity.shortName)){
+    const e=x.entity;
+    if(e.type==='team'||x.type==='team'||e.slug)arr.push(e);
+   }
+   if(x.id&&(x.name||x.shortName)&&!x.players&& !x.tournament)arr.push(x);
+   if(Array.isArray(x))x.forEach(walk);else Object.keys(x).forEach(k=>walk(x[k]));
+  };
+  walk(d);
+  const uniq=[],seen=new Set();
+  for(const x of arr){
+   if(seen.has(String(x.id)))continue;
+   seen.add(String(x.id));uniq.push(x);
   }
-  return out.sort((a,b)=>String(b.dateEvent||'').localeCompare(String(a.dateEvent||''))).slice(0,10);
- }catch(e){return[];}
+  const exact=uniq.find(x=>normName(x.name||x.shortName)===key);
+  const partial=uniq.find(x=>normName(x.name||x.shortName).includes(key)||key.includes(normName(x.name||x.shortName)));
+  const found=exact||partial||null;
+  sofaCache.set('team:'+key,found);
+  return found;
+ }catch(e){
+  sofaCache.set('team:'+key,null);return null;
+ }
 }
+
+async function sofaTeamMatches(name){
+ const t=await sofaSearchTeam(name);
+ if(!t||!t.id)return[];
+ const all=[];
+ for(let page=0;page<3&&all.length<12;page++){
+  try{
+   const r=await fetch(SOFA+'/team/'+encodeURIComponent(t.id)+'/events/last/'+page,{headers:{'Accept':'application/json'}});
+   if(!r.ok)break;
+   const d=await r.json();
+   const ev=d.events||[];
+   all.push(...ev);
+   if(!d.hasNextPage&&ev.length===0)break;
+  }catch(e){break;}
+ }
+ const out=[],seen=new Set();
+ for(const e of all){
+  if(!e||e.status&&e.status.type!=='finished')continue;
+  const hs=e.homeScore&&Number.isFinite(+e.homeScore.current)?+e.homeScore.current:null;
+  const as=e.awayScore&&Number.isFinite(+e.awayScore.current)?+e.awayScore.current:null;
+  if(hs===null||as===null)continue;
+  const hn=e.homeTeam&&e.homeTeam.name||'',an=e.awayTeam&&e.awayTeam.name||'';
+  if(!hn||!an)continue;
+  const key=String(e.id);
+  if(seen.has(key))continue;seen.add(key);
+  out.push({
+   idEvent:'sofa-'+key,
+   source:'SofaScore',
+   sourceEventId:key,
+   dateEvent:e.startTimestamp?new Date(e.startTimestamp*1000).toISOString().slice(0,10):'',
+   strHomeTeam:hn,strAwayTeam:an,
+   idHomeTeam:String(e.homeTeam.id||''),idAwayTeam:String(e.awayTeam.id||''),
+   intHomeScore:hs,intAwayScore:as,
+   tournament:e.tournament&&e.tournament.name||'',
+   sourceTeamId:String(t.id)
+  });
+ }
+ out.sort((a,b)=>String(b.dateEvent).localeCompare(String(a.dateEvent)));
+ return {team:t,events:out.slice(0,12)};
+}
+
+// FotMob : deuxième source indépendante.
+// On utilise les routes /api/data/* documentées par les wrappers publics.
 async function fotmobSearchTeam(name){
  try{
-  const r=await fetch('https://www.fotmob.com/api/searchData?term='+encodeURIComponent(name));
+  const r=await fetch('https://www.fotmob.com/api/data/search/suggest?hits=20&lang=fr&term='+encodeURIComponent(name));
   if(!r.ok)return null;
-  const d=await r.json(),norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim(),n=norm(name);
-  const found=[];
-  (function walk(x){
+  const d=await r.json(),key=normName(name),arr=[];
+  const walk=x=>{
    if(!x||typeof x!=='object')return;
-   if(x.id&&(x.name||x.shortName||x.displayName)){
-    const nm=x.name||x.shortName||x.displayName;
-    if(norm(nm)===n||norm(nm).includes(n)||n.includes(norm(nm)))found.push(x);
+   const e=x.entity||x;
+   if(e&&e.id&&(e.name||e.longName||e.shortName)){
+    const type=String(e.type||x.type||'').toLowerCase();
+    if(!type||type.includes('team'))arr.push(e);
    }
    if(Array.isArray(x))x.forEach(walk);else Object.keys(x).forEach(k=>walk(x[k]));
-  })(d);
-  return found.find(x=>x.id&&((x.name||'').toLowerCase().includes(n.split(' ')[0])))||found[0]||null;
- }catch(e){return null;}
-}
-async function fotmobTeamSchedule(name){
- const t=await fotmobSearchTeam(name);if(!t||!t.id)return[];
- try{
-  const r=await fetch('https://www.fotmob.com/api/teams?id='+encodeURIComponent(t.id));
-  if(!r.ok)return[];
-  const d=await r.json(),norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim(),target=norm(name),out=[];
-  const push=(o)=>{
-   if(!o||typeof o!=='object'||!o.home||!o.away)return;
-   const hn=o.home.name||o.home.shortName||'',an=o.away.name||o.away.shortName||'';
-   const hs=parseInt(o.home.score),as=parseInt(o.away.score);
-   const finished=o.status&&o.status.finished!==false;
-   if(!hn||!an||!finished||!Number.isFinite(hs)||!Number.isFinite(as))return;
-   if(norm(hn)!==target&&norm(an)!==target&&norm(hn)!==norm(t.name||'')&&norm(an)!==norm(t.name||''))return;
-   out.push({idEvent:'fotmob-'+String(o.id||o.matchId||Date.now())+'-'+out.length,dateEvent:String(o.status&&o.status.utcTime||o.date||'').slice(0,10),strHomeTeam:hn,strAwayTeam:an,idHomeTeam:String(o.home.id||''),idAwayTeam:String(o.away.id||''),intHomeScore:hs,intAwayScore:as});
   };
-  (function walk(x){
-   if(!x||typeof x!=='object')return;
-   if(Array.isArray(x))x.forEach(walk);else{push(x);Object.keys(x).forEach(k=>walk(x[k]));}
-  })(d);
-  const seen=new Set();
-  return out.filter(e=>{const k=e.idEvent;if(seen.has(k))return false;seen.add(k);return true;}).sort((a,b)=>String(b.dateEvent).localeCompare(String(a.dateEvent))).slice(0,10);
- }catch(e){return[];}
-}
-async function fotmobSearchTeam(name){
- try{
-  const r=await fetch('https://www.fotmob.com/api/searchData?term='+encodeURIComponent(name));
-  if(!r.ok)return null;
-  const d=await r.json(),norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim(),n=norm(name);
-  let found=null;
-  (function walk(x){
-   if(found||!x||typeof x!=='object')return;
-   if(x.id&&(x.name||x.longName||x.shortName)){
-    const nm=norm(x.name||x.longName||x.shortName);
-    if(nm===n||(n.length>3&&nm.includes(n))){found=x;return;}
-   }
-   for(const k of Object.keys(x)){const v=x[k];if(v&&typeof v==='object')Array.isArray(v)?v.forEach(walk):walk(v);}
-  })(d);
-  return found&&found.id?String(found.id):null;
+  walk(d);
+  const uniq=[],seen=new Set();
+  for(const x of arr){
+   if(seen.has(String(x.id)))continue;seen.add(String(x.id));uniq.push(x);
+  }
+  return uniq.find(x=>normName(x.name||x.longName||x.shortName)===key)
+      ||uniq.find(x=>{const n=normName(x.name||x.longName||x.shortName);return n.includes(key)||key.includes(n)})
+      ||null;
  }catch(e){return null;}
 }
+
 async function fotmobTeamMatches(name){
- const id=await fotmobSearchTeam(name);if(!id)return[];
+ const t=await fotmobSearchTeam(name);
+ if(!t||!t.id)return[];
  try{
-  const r=await fetch('https://www.fotmob.com/api/teams?id='+encodeURIComponent(id));
+  const r=await fetch('https://www.fotmob.com/api/data/teams?id='+encodeURIComponent(t.id));
   if(!r.ok)return[];
   const d=await r.json(),out=[];
   const push=x=>{
    if(!x||typeof x!=='object')return;
    const h=x.home||x.homeTeam,a=x.away||x.awayTeam;
-   const hs=h&&parseInt(h.score),as=a&&parseInt(a.score);
-   const finished=!!(x.status&&x.status.finished)||!!(x.status&&x.finished);
-   if(h&&a&&Number.isFinite(hs)&&Number.isFinite(as)&&(finished||x.finished===true)){
-    const date=(x.status&&x.status.utcTime)||x.utcTime||x.date||x.startTime||'';
-    out.push({idEvent:'fotmob-'+String(x.id||out.length),dateEvent:String(date).slice(0,10),strHomeTeam:h.name||h.longName||'',strAwayTeam:a.name||a.longName||'',intHomeScore:hs,intAwayScore:as});
-   }
+   const hs=h&&parseInt(h.score&&typeof h.score==='object'?h.score.current:h.score);
+   const as=a&&parseInt(a.score&&typeof a.score==='object'?a.score.current:a.score);
+   const status=x.status||{};
+   const finished=status.finished===true||status.type==='finished'||status.name==='FT'||x.finished===true;
+   if(!h||!a||!finished||!Number.isFinite(hs)||!Number.isFinite(as))return;
+   const hn=h.name||h.longName||h.shortName||'',an=a.name||a.longName||a.shortName||'';
+   if(!hn||!an)return;
+   const date=status.utcTime||x.utcTime||x.date||'';
+   out.push({
+    idEvent:'fotmob-'+String(x.id||x.matchId||out.length),
+    source:'FotMob',
+    dateEvent:String(date).slice(0,10),
+    strHomeTeam:hn,strAwayTeam:an,
+    idHomeTeam:String(h.id||''),idAwayTeam:String(a.id||''),
+    intHomeScore:hs,intAwayScore:as
+   });
   };
-  (function walk(x){
+  const walk=x=>{
    if(!x||typeof x!=='object')return;
    push(x);
-   for(const k of Object.keys(x)){const v=x[k];if(v&&typeof v==='object')Array.isArray(v)?v.forEach(walk):walk(v);}
-  })(d);
+   if(Array.isArray(x))x.forEach(walk);else Object.keys(x).forEach(k=>walk(x[k]));
+  };
+  walk(d);
   const seen=new Set();
-  return out.filter(e=>{const key=e.idEvent+'|'+e.dateEvent+'|'+e.strHomeTeam+'|'+e.strAwayTeam;if(seen.has(key))return false;seen.add(key);return true;}).sort((a,b)=>String(b.dateEvent).localeCompare(String(a.dateEvent))).slice(0,12);
+  return out.filter(e=>{
+   const k=e.idEvent+'|'+e.dateEvent+'|'+normName(e.strHomeTeam)+'|'+normName(e.strAwayTeam);
+   if(seen.has(k))return false;seen.add(k);return true;
+  }).sort((a,b)=>String(b.dateEvent).localeCompare(String(a.dateEvent))).slice(0,12);
  }catch(e){return[];}
 }
+
 async function lastMatches(t){
  const all=[];
- try{const r=await fetch(API+'eventslast.php?id='+encodeURIComponent(t.idTeam));if(r.ok){const d=await r.json();all.push(...(d.results||[]));}}catch(e){}
+ // 1) SofaScore : source principale des 5 derniers résultats toutes compétitions.
+ const sofa=await sofaTeamMatches(t.strTeam);
+ if(sofa&&sofa.events)all.push(...sofa.events);
+
+ // 2) FotMob : on complète avec une deuxième base indépendante.
+ const fot=await fotmobTeamMatches(t.strTeam);
+ all.push(...fot);
+
+ // 3) TheSportsDB : identité déjà chargée + complément historique disponible.
+ try{
+  const r=await fetch(API+'eventslast.php?id='+encodeURIComponent(t.idTeam));
+  if(r.ok){const d=await r.json();all.push(...(d.results||[]).map(e=>({...e,source:'TheSportsDB'})));}
+ }catch(e){}
  for(const season of seasonCandidates())all.push(...await fetchSeason(t,season,t.idLeague));
- const normalize=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+
  const clean=arr=>{
   const seen=new Set();
   return arr.filter(e=>{
-   const key=e.idEvent||((e.dateEvent||'')+'|'+normalize(e.strHomeTeam)+'|'+normalize(e.strAwayTeam));
+   const key=(e.dateEvent||'')+'|'+normName(e.strHomeTeam)+'|'+normName(e.strAwayTeam)+'|'+e.intHomeScore+'|'+e.intAwayScore;
    if(seen.has(key))return false;seen.add(key);
-   const h=String(e.idHomeTeam||'')===String(t.idTeam)||normalize(e.strHomeTeam)===normalize(t.strTeam);
-   const a=String(e.idAwayTeam||'')===String(t.idTeam)||normalize(e.strAwayTeam)===normalize(t.strTeam);
+   const target=normName(t.strTeam);
+   const h=String(e.idHomeTeam||'')===String(t.idTeam)||normName(e.strHomeTeam)===target;
+   const a=String(e.idAwayTeam||'')===String(t.idTeam)||normName(e.strAwayTeam)===target;
    const hs=parseInt(e.intHomeScore),as=parseInt(e.intAwayScore);
    return (h||a)&&Number.isFinite(hs)&&Number.isFinite(as);
   }).sort((a,b)=>String(b.dateEvent||'').localeCompare(String(a.dateEvent||'')));
  };
- let merged=clean(all);
- // Source indépendante supplémentaire : FotMob.
- const fot=await fotmobTeamMatches(t.strTeam);
- merged=clean([...merged,...fot]);
- // ESPN complète encore si nécessaire.
- if(merged.length<5)merged=clean([...merged,...await espnTeamSchedule(t.strTeam)]);
- return merged.slice(0,5);
+ return clean(all).slice(0,5);
 }
 async function headToHead(home,away){
  const all=[];
@@ -276,7 +315,7 @@ async function predict(){
  // Le face-à-face est secondaire : il ajuste le résultat sans remplacer la forme récente.
  if(h2h.n){const hh=h2h.hg/h2h.n,ha=h2h.ag/h2h.n;lh=lh*.80+hh*.20;la=la*.80+ha*.20;}
  lh=Math.max(.05,Math.min(5,lh));la=Math.max(.05,Math.min(5,la));
- const quality='Bonne : le moteur recherche automatiquement au minimum les 5 derniers résultats exploitables de chaque équipe, toutes compétitions confondues. TheSportsDB est prioritaire ; FotMob puis ESPN servent de sources de secours si la source principale est insuffisante. La forme récente et les buts ont le poids principal ; le face-à-face sert d’ajustement secondaire.';
+ const quality='Bonne : le moteur recherche automatiquement au minimum les 5 derniers résultats exploitables de chaque équipe, toutes compétitions confondues. SofaScore et FotMob sont les sources principales des résultats récents ; TheSportsDB sert de complément. La forme récente et les buts ont le poids principal ; le face-à-face sert d’ajustement secondaire.';
  let rows=[],total=0,ph=0,pd=0,pa=0,btts=0;for(let h=0;h<=10;h++)for(let a=0;a<=10;a++){const p=poisson(h,lh)*poisson(a,la);rows.push({h,a,p});total+=p}rows.forEach(x=>{x.p/=total;if(x.h>x.a)ph+=x.p;else if(x.h===x.a)pd+=x.p;else pa+=x.p;if(x.h>0&&x.a>0)btts+=x.p});rows.sort((x,y)=>y.p-x.p);
  document.getElementById('homeName').textContent=teams.home.strTeam;document.getElementById('awayName').textContent=teams.away.strTeam;document.getElementById('rhClub').textContent=teams.home.strTeam;document.getElementById('raClub').textContent=teams.away.strTeam;document.getElementById('rhLogo').src=teams.home.strBadge||teams.home.strLogo||'';document.getElementById('raLogo').src=teams.away.strBadge||teams.away.strLogo||'';
  document.getElementById('rhInfo').textContent=(teams.home.strLeague||'—')+' • '+(teams.home.strCountry||'—')+' • '+(teams.home.strStadium||'—');document.getElementById('raInfo').textContent=(teams.away.strLeague||'—')+' • '+(teams.away.strCountry||'—')+' • '+(teams.away.strStadium||'—');
