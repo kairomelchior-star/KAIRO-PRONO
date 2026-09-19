@@ -57,7 +57,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px 8px;border-bottom:1
 <h3>🧮 Indicateurs du modèle</h3><div class="metrics"><div class="metric"><b id="xgH">—</b><span>Buts attendus domicile</span></div><div class="metric"><b id="xgA">—</b><span>Buts attendus extérieur</span></div><div class="metric"><b id="totalG">—</b><span>Total attendu</span></div><div class="metric"><b id="btts">—</b><span>Deux équipes marquent</span></div></div>
 <h3>🎯 Top 3 des scores exacts</h3><table><thead><tr><th>Score</th><th>Probabilité</th></tr></thead><tbody id="scores"></tbody></table>
 <h3>🗓️ Derniers matchs disponibles</h3><table><thead><tr><th>Club</th><th>Adversaire</th><th>Score</th></tr></thead><tbody id="recent"></tbody></table>
-<div class="disclaimer">ℹ️ <b>Source automatique :</b> les informations de club, logos et résultats disponibles sont récupérés via TheSportsDB. La version gratuite impose des limites sur certaines données ; KAIRO PRONO n'invente pas une statistique manquante et réduit automatiquement l'influence d'un échantillon trop petit. Le score exact reste une estimation probabiliste, jamais une certitude.</div>
+<div class="disclaimer">ℹ️ <b>Source automatique :</b> les informations de club et logos sont récupérés via TheSportsDB. Pour les 5 derniers résultats, KAIRO PRONO utilise d'abord TheSportsDB puis, si nécessaire, un calendrier public ESPN en secours pour couvrir toutes les compétitions. Si aucune donnée exploitable n'est trouvée, le système bloque l'analyse au lieu d'inventer une statistique. Le score exact reste une estimation probabiliste, jamais une certitude.</div>
 </section></main><footer>© 2026 KAIRO PRONO — Football Analytics • Données : TheSportsDB</footer>
 <script>
 const API='https://www.thesportsdb.com/api/v1/json/123/';const teams={home:null,away:null};
@@ -95,40 +95,65 @@ async function fetchSeason(t,season,leagueId){
   const d=await r.json();return d.events||[];
  }catch(e){return[];}
 }
-async function fetchCountryLeagues(t){
- if(!t.strCountry)return[];
+async function fetchEspnTeams(){
  try{
-  const r=await fetch(API+'search_all_leagues.php?c='+encodeURIComponent(t.strCountry)+'&s=Soccer');
+  const r=await fetch('https://site.web.api.espn.com/apis/site/v2/sports/soccer/all/teams?limit=1000');
   if(!r.ok)return[];
-  const d=await r.json();
-  return (d.countryleagues||[]).map(x=>({idLeague:x.idLeague,strLeague:x.strLeague})).filter(x=>x.idLeague).slice(0,10);
+  const d=await r.json(),out=[];
+  (function walk(x){
+   if(!x||typeof x!=='object')return;
+   if(x.team&&x.team.id&&x.team.displayName)out.push(x.team);
+   else if(x.id&&x.displayName&&x.links)out.push(x);
+   for(const k of Object.keys(x)){const v=x[k];if(v&&typeof v==='object')Array.isArray(v)?v.forEach(walk):walk(v);}
+  })(d);
+  const seen=new Set();
+  return out.filter(t=>{if(seen.has(String(t.id)))return false;seen.add(String(t.id));return true;});
+ }catch(e){return[];}
+}
+let espnTeamsPromise=null;
+async function espnTeamSchedule(name){
+ if(!espnTeamsPromise)espnTeamsPromise=fetchEspnTeams();
+ const list=await espnTeamsPromise;
+ const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+ const n=norm(name);
+ let t=list.find(x=>norm(x.displayName)===n)||list.find(x=>norm(x.shortDisplayName)===n)||list.find(x=>norm(x.name)===n);
+ if(!t){const words=n.split(' ').filter(Boolean);t=list.find(x=>words.length>=2&&words.every(w=>norm(x.displayName).includes(w))); }
+ if(!t||!t.id)return[];
+ try{
+  const r=await fetch('https://site.web.api.espn.com/apis/site/v2/sports/soccer/all/teams/'+encodeURIComponent(t.id)+'/schedule');
+  if(!r.ok)return[];
+  const d=await r.json(),events=d.events||[],out=[];
+  for(const e of events){
+   const comp=e.competitions&&e.competitions[0],cs=comp&&comp.competitors||[];
+   const hc=cs.find(x=>x.homeAway==='home'),ac=cs.find(x=>x.homeAway==='away');
+   if(!hc||!ac)continue;
+   const hs=parseInt(hc.score),as=parseInt(ac.score);
+   const completed=!!(e.status&&e.status.type&&e.status.type.completed);
+   if(!completed||!Number.isFinite(hs)||!Number.isFinite(as))continue;
+   out.push({idEvent:'espn-'+e.id,dateEvent:(e.date||'').slice(0,10),strHomeTeam:hc.team&&hc.team.displayName||'',strAwayTeam:ac.team&&ac.team.displayName||'',idHomeTeam:String(hc.team&&hc.team.id||''),idAwayTeam:String(ac.team&&ac.team.id||''),intHomeScore:hs,intAwayScore:as});
+  }
+  return out.sort((a,b)=>String(b.dateEvent||'').localeCompare(String(a.dateEvent||''))).slice(0,10);
  }catch(e){return[];}
 }
 async function lastMatches(t){
  const all=[];
- // 1) Dernier résultat direct fourni par TheSportsDB.
  try{const r=await fetch(API+'eventslast.php?id='+encodeURIComponent(t.idTeam));if(r.ok){const d=await r.json();all.push(...(d.results||[]));}}catch(e){}
- // 2) Saison actuelle + précédente de la compétition principale.
  for(const season of seasonCandidates())all.push(...await fetchSeason(t,season,t.idLeague));
- // 3) Recherche automatique élargie : autres compétitions du même pays.
- // Cela permet de récupérer coupe/coupe de la ligue/autres compétitions quand elles existent dans TheSportsDB.
- const leagues=await fetchCountryLeagues(t);
- const seasons=seasonCandidates().slice(0,1);
- const extra=[];
- for(const lg of leagues){
-  if(String(lg.idLeague)===String(t.idLeague))continue;
-  for(const season of seasons)extra.push(fetchSeason(t,season,lg.idLeague));
- }
- if(extra.length)all.push(...(await Promise.all(extra)).flat());
- const seen=new Set();
- return all.filter(e=>{
-  const key=e.idEvent||((e.dateEvent||'')+'|'+(e.idHomeTeam||'')+'|'+(e.idAwayTeam||''));
-  if(seen.has(key))return false;seen.add(key);
-  const h=String(e.idHomeTeam||'')===String(t.idTeam)||e.strHomeTeam===t.strTeam;
-  const a=String(e.idAwayTeam||'')===String(t.idTeam)||e.strAwayTeam===t.strTeam;
-  const hs=parseInt(e.intHomeScore),as=parseInt(e.intAwayScore);
-  return (h||a)&&Number.isFinite(hs)&&Number.isFinite(as);
- }).sort((a,b)=>String(b.dateEvent||'').localeCompare(String(a.dateEvent||''))).slice(0,5);
+ const normalize=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+ const clean=arr=>{
+  const seen=new Set();
+  return arr.filter(e=>{
+   const key=e.idEvent||((e.dateEvent||'')+'|'+normalize(e.strHomeTeam)+'|'+normalize(e.strAwayTeam));
+   if(seen.has(key))return false;seen.add(key);
+   const h=String(e.idHomeTeam||'')===String(t.idTeam)||normalize(e.strHomeTeam)===normalize(t.strTeam);
+   const a=String(e.idAwayTeam||'')===String(t.idTeam)||normalize(e.strAwayTeam)===normalize(t.strTeam);
+   const hs=parseInt(e.intHomeScore),as=parseInt(e.intAwayScore);
+   return (h||a)&&Number.isFinite(hs)&&Number.isFinite(as);
+  }).sort((a,b)=>String(b.dateEvent||'').localeCompare(String(a.dateEvent||'')));
+ };
+ let merged=clean(all);
+ if(merged.length<5)merged=clean([...merged,...await espnTeamSchedule(t.strTeam)]);
+ return merged.slice(0,5);
 }
 async function headToHead(home,away){
  const all=[];
@@ -165,7 +190,7 @@ async function predict(){
  // Le face-à-face est secondaire : il ajuste le résultat sans remplacer la forme récente.
  if(h2h.n){const hh=h2h.hg/h2h.n,ha=h2h.ag/h2h.n;lh=lh*.80+hh*.20;la=la*.80+ha*.20;}
  lh=Math.max(.05,Math.min(5,lh));la=Math.max(.05,Math.min(5,la));
- const quality='Bonne : le moteur recherche automatiquement au minimum les 5 derniers résultats exploitables de chaque équipe, toutes compétitions disponibles confondues. La forme récente et les buts ont le poids principal ; le face-à-face sert d’ajustement secondaire.';
+ const quality='Bonne : le moteur recherche automatiquement au minimum les 5 derniers résultats exploitables de chaque équipe, toutes compétitions confondues. TheSportsDB est prioritaire ; ESPN sert uniquement de secours si la source principale est insuffisante. La forme récente et les buts ont le poids principal ; le face-à-face sert d’ajustement secondaire.';
  let rows=[],total=0,ph=0,pd=0,pa=0,btts=0;for(let h=0;h<=10;h++)for(let a=0;a<=10;a++){const p=poisson(h,lh)*poisson(a,la);rows.push({h,a,p});total+=p}rows.forEach(x=>{x.p/=total;if(x.h>x.a)ph+=x.p;else if(x.h===x.a)pd+=x.p;else pa+=x.p;if(x.h>0&&x.a>0)btts+=x.p});rows.sort((x,y)=>y.p-x.p);
  document.getElementById('homeName').textContent=teams.home.strTeam;document.getElementById('awayName').textContent=teams.away.strTeam;document.getElementById('rhClub').textContent=teams.home.strTeam;document.getElementById('raClub').textContent=teams.away.strTeam;document.getElementById('rhLogo').src=teams.home.strBadge||teams.home.strLogo||'';document.getElementById('raLogo').src=teams.away.strBadge||teams.away.strLogo||'';
  document.getElementById('rhInfo').textContent=(teams.home.strLeague||'—')+' • '+(teams.home.strCountry||'—')+' • '+(teams.home.strStadium||'—');document.getElementById('raInfo').textContent=(teams.away.strLeague||'—')+' • '+(teams.away.strCountry||'—')+' • '+(teams.away.strStadium||'—');
@@ -176,7 +201,7 @@ async function predict(){
  document.getElementById('scores').innerHTML=rows.slice(0,3).map(x=>'<tr><td><b>'+x.h+' – '+x.a+'</b></td><td class="prob">'+pct(x.p)+'</td></tr>').join('');
  const recent=[...hs.rows.slice(0,5).map(x=>({club:teams.home.strTeam,...x})),...as.rows.slice(0,5).map(x=>({club:teams.away.strTeam,...x}))];document.getElementById('recent').innerHTML=recent.length?recent.map(x=>'<tr><td><b>'+esc(x.club)+'</b></td><td>'+esc(x.opp||'—')+'</td><td><b>'+x.score+'</b> <small>('+x.result+')</small></td></tr>').join(''):'<tr><td colspan="3">Aucun résultat exploitable disponible.</td></tr>';
  document.getElementById('result').style.display='block';document.getElementById('result').scrollIntoView({behavior:'smooth',block:'start'});setStatus('Analyse terminée : les données affichées proviennent des données disponibles, sans inventer les statistiques manquantes.');
- }catch(e){setStatus(e.message==='MIN5'?'Analyse bloquée : KAIRO PRONO n’a pas trouvé 5 résultats récents exploitables pour chacune des deux équipes, même après la recherche automatique toutes compétitions.':'Une erreur est survenue pendant l’analyse. Réessaie dans quelques secondes.','err');}
+ }catch(e){setStatus(e.message==='MIN5'?'Analyse bloquée : KAIRO PRONO n’a pas trouvé 5 résultats récents exploitables pour chacune des deux équipes, même après les sources automatiques disponibles.':'Une erreur est survenue pendant l’analyse. Réessaie dans quelques secondes.','err');}
  finally{btn.disabled=!(teams.home&&teams.away);btn.textContent='⚡ ANALYSER LE MATCH';}
 }
 document.getElementById('hSearch').addEventListener('keydown',e=>{if(e.key==='Enter')loadTeam('home')});document.getElementById('aSearch').addEventListener('keydown',e=>{if(e.key==='Enter')loadTeam('away')});
